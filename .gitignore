@@ -20,7 +20,8 @@ DerivedData/
 # macOS files
 .DS_Store
 
-
+# VSCode settings
+.vscode/
 
 # Based on Android gitignore template: https://github.com/github/gitignore/blob/HEAD/Android.gitignore
 
