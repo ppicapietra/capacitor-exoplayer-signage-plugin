@@ -1,3 +1,6 @@
 export interface ExoPlayerSignagePlugin {
-  echo(options: { value: string }): Promise<{ value: string }>;
+  play(options: { url: string }): Promise<{ status: string }>;
+  stop(): Promise<void>;
+  pause(): Promise<void>;
+  setVolume(options: { volume: number }): Promise<void>;
 }
