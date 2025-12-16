@@ -49,14 +49,30 @@ public class ExoPlayerSignagePlugin extends Plugin {
                 .setUpstreamDataSourceFactory(new DefaultHttpDataSource.Factory())
                 .setFlags(CacheDataSource.FLAG_BLOCK_ON_CACHE | CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR);
 
-        player = new ExoPlayer.Builder(getContext())
-                .setMediaSourceFactory(
-                        new DefaultMediaSourceFactory(getContext())
-                                .setDataSourceFactory(cacheDataSourceFactory))
-                .build();
+        // ExoPlayer initialization and configuration should be on main thread
+        android.app.Activity activity = getBridge().getActivity();
+        if (activity != null) {
+            activity.runOnUiThread(() -> {
+                player = new ExoPlayer.Builder(getContext())
+                        .setMediaSourceFactory(
+                                new DefaultMediaSourceFactory(getContext())
+                                        .setDataSourceFactory(cacheDataSourceFactory))
+                        .build();
 
-        player.setPlayWhenReady(true);
-        player.setRepeatMode(ExoPlayer.REPEAT_MODE_OFF);
+                player.setPlayWhenReady(true);
+                player.setRepeatMode(ExoPlayer.REPEAT_MODE_OFF);
+            });
+        } else {
+            // Fallback if activity is not available (shouldn't happen during load, but safety check)
+            player = new ExoPlayer.Builder(getContext())
+                    .setMediaSourceFactory(
+                            new DefaultMediaSourceFactory(getContext())
+                                    .setDataSourceFactory(cacheDataSourceFactory))
+                    .build();
+
+            player.setPlayWhenReady(true);
+            player.setRepeatMode(ExoPlayer.REPEAT_MODE_OFF);
+        }
     }
 
     @PluginMethod
@@ -66,36 +82,111 @@ public class ExoPlayerSignagePlugin extends Plugin {
             call.reject("URL requerida");
             return;
         }
-        player.setMediaItem(MediaItem.fromUri(Uri.parse(url)));
-        player.prepare();
-        player.play();
-        call.resolve();
+        
+        // ExoPlayer must be accessed from the main thread
+        android.app.Activity activity = getBridge().getActivity();
+        if (activity == null) {
+            call.reject("Activity not available");
+            return;
+        }
+        
+        activity.runOnUiThread(() -> {
+            try {
+                player.setMediaItem(MediaItem.fromUri(Uri.parse(url)));
+                player.prepare();
+                player.play();
+                call.resolve();
+            } catch (Exception e) {
+                call.reject("Error playing: " + e.getMessage(), e);
+            }
+        });
     }
 
     @PluginMethod
     public void pause(PluginCall call) {
-        player.pause();
-        call.resolve();
+        // ExoPlayer must be accessed from the main thread
+        android.app.Activity activity = getBridge().getActivity();
+        if (activity == null) {
+            call.reject("Activity not available");
+            return;
+        }
+        
+        activity.runOnUiThread(() -> {
+            try {
+                player.pause();
+                call.resolve();
+            } catch (Exception e) {
+                call.reject("Error pausing: " + e.getMessage(), e);
+            }
+        });
     }
 
     @PluginMethod
     public void stop(PluginCall call) {
-        player.stop();
-        call.resolve();
+        // ExoPlayer must be accessed from the main thread
+        android.app.Activity activity = getBridge().getActivity();
+        if (activity == null) {
+            call.reject("Activity not available");
+            return;
+        }
+        
+        activity.runOnUiThread(() -> {
+            try {
+                player.stop();
+                call.resolve();
+            } catch (Exception e) {
+                call.reject("Error stopping: " + e.getMessage(), e);
+            }
+        });
     }
 
     @PluginMethod
     public void setVolume(PluginCall call) {
-        float vol = (float) call.getDouble("volume", 1.0);
-        player.setVolume(vol);
-        call.resolve();
+        Double volumeValue = call.getDouble("volume", 1.0);
+        float vol = volumeValue != null ? volumeValue.floatValue() : 1.0f;
+        
+        // ExoPlayer must be accessed from the main thread
+        android.app.Activity activity = getBridge().getActivity();
+        if (activity == null) {
+            call.reject("Activity not available");
+            return;
+        }
+        
+        activity.runOnUiThread(() -> {
+            try {
+                player.setVolume(vol);
+                call.resolve();
+            } catch (Exception e) {
+                call.reject("Error setting volume: " + e.getMessage(), e);
+            }
+        });
     }
 
     @Override
     protected void handleOnDestroy() {
-        if (player != null)
-            player.release();
-        if (cache != null)
-            cache.release();
+        // ExoPlayer must be accessed from the main thread
+        android.app.Activity activity = getBridge().getActivity();
+        if (activity != null) {
+            activity.runOnUiThread(() -> {
+                if (player != null) {
+                    player.release();
+                    player = null;
+                }
+                if (cache != null) {
+                    cache.release();
+                    cache = null;
+                }
+            });
+        } else {
+            // Fallback if activity is not available (shouldn't happen, but safety check)
+            if (player != null) {
+                player.release();
+                player = null;
+            }
+            if (cache != null) {
+                cache.release();
+                cache = null;
+            }
+        }
     }
 }
