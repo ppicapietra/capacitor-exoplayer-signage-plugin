@@ -12,12 +12,14 @@ import android.content.Context;
 
 import com.google.android.exoplayer2.ExoPlayer;
 import com.google.android.exoplayer2.MediaItem;
+import com.google.android.exoplayer2.audio.AudioAttributes;
 import com.google.android.exoplayer2.source.DefaultMediaSourceFactory;
 import com.google.android.exoplayer2.upstream.cache.CacheDataSource;
 import com.google.android.exoplayer2.upstream.cache.LeastRecentlyUsedCacheEvictor;
 import com.google.android.exoplayer2.upstream.cache.SimpleCache;
 import com.google.android.exoplayer2.database.StandaloneDatabaseProvider;
 import com.google.android.exoplayer2.upstream.DefaultHttpDataSource;
+import com.google.android.exoplayer2.C;
 
 import java.io.File;
 
@@ -59,8 +61,16 @@ public class ExoPlayerSignagePlugin extends Plugin {
                                         .setDataSourceFactory(cacheDataSourceFactory))
                         .build();
 
+                // Configure AudioAttributes for muted playback
+                AudioAttributes audioAttributes = new AudioAttributes.Builder()
+                        .setUsage(C.USAGE_MEDIA)
+                        .setContentType(C.CONTENT_TYPE_MOVIE)
+                        .build();
+                player.setAudioAttributes(audioAttributes, false); // false = don't handle audio focus
+
                 player.setPlayWhenReady(true);
                 player.setRepeatMode(ExoPlayer.REPEAT_MODE_OFF);
+                player.setVolume(0.0f); // Mute videos by default (signage videos should be silent)
             });
         } else {
             // Fallback if activity is not available (shouldn't happen during load, but safety check)
@@ -70,8 +80,16 @@ public class ExoPlayerSignagePlugin extends Plugin {
                                     .setDataSourceFactory(cacheDataSourceFactory))
                     .build();
 
+            // Configure AudioAttributes for muted playback
+            AudioAttributes audioAttributes = new AudioAttributes.Builder()
+                    .setUsage(C.USAGE_MEDIA)
+                    .setContentType(C.CONTENT_TYPE_MOVIE)
+                    .build();
+            player.setAudioAttributes(audioAttributes, false); // false = don't handle audio focus
+
             player.setPlayWhenReady(true);
             player.setRepeatMode(ExoPlayer.REPEAT_MODE_OFF);
+            player.setVolume(0.0f); // Mute videos by default (signage videos should be silent)
         }
     }
 
@@ -92,9 +110,19 @@ public class ExoPlayerSignagePlugin extends Plugin {
         
         activity.runOnUiThread(() -> {
             try {
+                // Set media item first
                 player.setMediaItem(MediaItem.fromUri(Uri.parse(url)));
                 player.prepare();
+                
+                // Ensure volume is set to 0 AFTER prepare() to ensure it takes effect
+                player.setVolume(0.0f); // Ensure videos are muted (signage videos should be silent)
+                
+                // Start playback
                 player.play();
+                
+                // Set volume again after play() as additional safeguard
+                player.setVolume(0.0f);
+                
                 call.resolve();
             } catch (Exception e) {
                 call.reject("Error playing: " + e.getMessage(), e);

@@ -1,6 +1,6 @@
 {
   "name": "@ppicapietra/capacitor-exoplayer-signage-plugin",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "description": "Plugin for ExoPlayer in Digital Signage with eternal cache",
   "main": "dist/plugin.cjs.js",
   "module": "dist/esm/index.js",
