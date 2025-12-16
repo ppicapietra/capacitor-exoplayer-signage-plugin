@@ -54,9 +54,9 @@ dependencies {
     implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
     
     // ExoPlayer dependencies
-    implementation 'com.google.android.exoplayer2:exoplayer:2.19.1'
-    implementation 'com.google.android.exoplayer2:exoplayer-core:2.19.1'
-    implementation 'com.google.android.exoplayer2:exoplayer-database:2.19.1'
+    implementation 'com.google.android.exoplayer:exoplayer-core:2.18.10'
+    implementation 'com.google.android.exoplayer:exoplayer-ui:2.18.10'
+    implementation 'com.google.android.exoplayer:exoplayer-database:2.18.10'
     
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
