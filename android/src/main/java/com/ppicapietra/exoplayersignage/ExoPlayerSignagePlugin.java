@@ -138,9 +138,8 @@ public class ExoPlayerSignagePlugin extends Plugin {
                 // Ensure SurfaceView is visible and associated with player
                 if (surfaceView != null) {
                     surfaceView.setVisibility(android.view.View.VISIBLE);
-                    // Ensure SurfaceView is on top of WebView
-                    surfaceView.bringToFront();
                     // Re-associate in case it was cleared
+                    // Note: We don't call bringToFront() to allow WebView overlays (like modals) to appear above the video
                     player.setVideoSurfaceView(surfaceView);
                 }
                 
