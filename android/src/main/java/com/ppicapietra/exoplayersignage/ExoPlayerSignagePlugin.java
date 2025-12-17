@@ -228,6 +228,50 @@ public class ExoPlayerSignagePlugin extends Plugin {
         });
     }
 
+    @PluginMethod
+    public void hide(PluginCall call) {
+        // Hide SurfaceView without stopping playback
+        android.app.Activity activity = getBridge().getActivity();
+        if (activity == null) {
+            call.reject("Activity not available");
+            return;
+        }
+        
+        activity.runOnUiThread(() -> {
+            try {
+                if (surfaceView != null) {
+                    surfaceView.setVisibility(android.view.View.GONE);
+                }
+                call.resolve();
+            } catch (Exception e) {
+                call.reject("Error hiding SurfaceView: " + e.getMessage(), e);
+            }
+        });
+    }
+
+    @PluginMethod
+    public void show(PluginCall call) {
+        // Show SurfaceView without restarting playback
+        android.app.Activity activity = getBridge().getActivity();
+        if (activity == null) {
+            call.reject("Activity not available");
+            return;
+        }
+        
+        activity.runOnUiThread(() -> {
+            try {
+                if (surfaceView != null && player != null) {
+                    surfaceView.setVisibility(android.view.View.VISIBLE);
+                    // Re-associate SurfaceView with player in case it was cleared
+                    player.setVideoSurfaceView(surfaceView);
+                }
+                call.resolve();
+            } catch (Exception e) {
+                call.reject("Error showing SurfaceView: " + e.getMessage(), e);
+            }
+        });
+    }
+
     @Override
     protected void handleOnDestroy() {
         // ExoPlayer must be accessed from the main thread
