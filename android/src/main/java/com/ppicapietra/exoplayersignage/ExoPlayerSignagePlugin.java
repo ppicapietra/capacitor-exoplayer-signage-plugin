@@ -126,6 +126,10 @@ public class ExoPlayerSignagePlugin extends Plugin {
             return;
         }
         
+        // Get visible parameter (default to true for backward compatibility)
+        Boolean visibleValue = call.getBoolean("visible", true);
+        boolean visible = visibleValue != null ? visibleValue : true;
+        
         // ExoPlayer must be accessed from the main thread
         android.app.Activity activity = getBridge().getActivity();
         if (activity == null) {
@@ -135,9 +139,10 @@ public class ExoPlayerSignagePlugin extends Plugin {
         
         activity.runOnUiThread(() -> {
             try {
-                // Ensure SurfaceView is visible and associated with player
+                // Associate SurfaceView with player (always needed for playback)
                 if (surfaceView != null) {
-                    surfaceView.setVisibility(android.view.View.VISIBLE);
+                    // Set visibility based on visible parameter
+                    surfaceView.setVisibility(visible ? android.view.View.VISIBLE : android.view.View.GONE);
                     // Re-associate in case it was cleared
                     // Note: We don't call bringToFront() to allow WebView overlays (like modals) to appear above the video
                     player.setVideoSurfaceView(surfaceView);
