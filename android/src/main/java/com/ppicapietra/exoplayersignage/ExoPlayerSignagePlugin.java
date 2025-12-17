@@ -9,6 +9,9 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 
 import android.net.Uri;
 import android.content.Context;
+import android.view.SurfaceView;
+import android.view.ViewGroup;
+import android.widget.FrameLayout;
 
 import com.google.android.exoplayer2.ExoPlayer;
 import com.google.android.exoplayer2.MediaItem;
@@ -29,6 +32,7 @@ public class ExoPlayerSignagePlugin extends Plugin {
     private ExoPlayer player;
     private SimpleCache cache;
     private CacheDataSource.Factory cacheDataSourceFactory;
+    private SurfaceView surfaceView;
 
     private long getSafeCacheSize() {
         File cacheDir = getContext().getCacheDir();
@@ -55,11 +59,32 @@ public class ExoPlayerSignagePlugin extends Plugin {
         android.app.Activity activity = getBridge().getActivity();
         if (activity != null) {
             activity.runOnUiThread(() -> {
+                // Create SurfaceView for video rendering
+                surfaceView = new SurfaceView(getContext());
+                FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT
+                );
+                surfaceView.setLayoutParams(params);
+                // Set z-order to ensure SurfaceView is above WebView for video rendering
+                surfaceView.setZOrderMediaOverlay(true); // Above WebView for video overlay
+                surfaceView.setZOrderOnTop(false); // Not on top (allows UI overlays)
+                
+                // Add SurfaceView to root view (initially hidden)
+                ViewGroup rootView = (ViewGroup) activity.findViewById(android.R.id.content);
+                if (rootView != null) {
+                    rootView.addView(surfaceView);
+                    surfaceView.setVisibility(android.view.View.GONE); // Hidden until video plays
+                }
+                
                 player = new ExoPlayer.Builder(getContext())
                         .setMediaSourceFactory(
                                 new DefaultMediaSourceFactory(getContext())
                                         .setDataSourceFactory(cacheDataSourceFactory))
                         .build();
+                
+                // Associate SurfaceView with ExoPlayer
+                player.setVideoSurfaceView(surfaceView);
 
                 // Configure AudioAttributes for muted playback
                 AudioAttributes audioAttributes = new AudioAttributes.Builder()
@@ -110,6 +135,15 @@ public class ExoPlayerSignagePlugin extends Plugin {
         
         activity.runOnUiThread(() -> {
             try {
+                // Ensure SurfaceView is visible and associated with player
+                if (surfaceView != null) {
+                    surfaceView.setVisibility(android.view.View.VISIBLE);
+                    // Ensure SurfaceView is on top of WebView
+                    surfaceView.bringToFront();
+                    // Re-associate in case it was cleared
+                    player.setVideoSurfaceView(surfaceView);
+                }
+                
                 // Set media item first
                 player.setMediaItem(MediaItem.fromUri(Uri.parse(url)));
                 player.prepare();
@@ -161,6 +195,11 @@ public class ExoPlayerSignagePlugin extends Plugin {
         activity.runOnUiThread(() -> {
             try {
                 player.stop();
+                // Hide SurfaceView when stopped
+                if (surfaceView != null) {
+                    surfaceView.setVisibility(android.view.View.GONE);
+                    player.clearVideoSurfaceView(surfaceView);
+                }
                 call.resolve();
             } catch (Exception e) {
                 call.reject("Error stopping: " + e.getMessage(), e);
@@ -197,8 +236,20 @@ public class ExoPlayerSignagePlugin extends Plugin {
         if (activity != null) {
             activity.runOnUiThread(() -> {
                 if (player != null) {
+                    // Clear video surface before releasing
+                    if (surfaceView != null) {
+                        player.clearVideoSurfaceView(surfaceView);
+                    }
                     player.release();
                     player = null;
+                }
+                if (surfaceView != null) {
+                    // Remove SurfaceView from view hierarchy
+                    ViewGroup parent = (ViewGroup) surfaceView.getParent();
+                    if (parent != null) {
+                        parent.removeView(surfaceView);
+                    }
+                    surfaceView = null;
                 }
                 if (cache != null) {
                     cache.release();
@@ -208,8 +259,14 @@ public class ExoPlayerSignagePlugin extends Plugin {
         } else {
             // Fallback if activity is not available (shouldn't happen, but safety check)
             if (player != null) {
+                if (surfaceView != null) {
+                    player.clearVideoSurfaceView(surfaceView);
+                }
                 player.release();
                 player = null;
+            }
+            if (surfaceView != null) {
+                surfaceView = null;
             }
             if (cache != null) {
                 cache.release();
