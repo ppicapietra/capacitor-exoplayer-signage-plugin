@@ -253,7 +253,7 @@ public class ExoPlayerSignagePlugin extends Plugin {
                         if (instance.textureView != null) {
                             // Remove TextureView if it exists
                             try {
-                                player.clearVideoTextureView();
+                                player.clearVideoTextureView(instance.textureView);
                             } catch (Exception e) {
                                 // Ignore
                             }
@@ -304,7 +304,7 @@ public class ExoPlayerSignagePlugin extends Plugin {
                     if (instance.textureView != null) {
                         // Clear video texture first
                         try {
-                            player.clearVideoTextureView();
+                            player.clearVideoTextureView(instance.textureView);
                         } catch (Exception e) {
                             // Ignore errors
                         }
@@ -327,7 +327,7 @@ public class ExoPlayerSignagePlugin extends Plugin {
                     }
                     
                     // Ensure no video texture is set on the player
-                    player.clearVideoTextureView();
+                    // Note: clearVideoTextureView requires a TextureView parameter, so we only clear if one exists
                 }
                 
                 // Stop any current playback before setting new media item
@@ -454,7 +454,7 @@ public class ExoPlayerSignagePlugin extends Plugin {
                 if ("audio".equals(instance.type)) {
                     if (instance.textureView != null) {
                         try {
-                            instance.player.clearVideoTextureView();
+                            instance.player.clearVideoTextureView(instance.textureView);
                         } catch (Exception e) {
                             // Ignore
                         }
@@ -470,7 +470,7 @@ public class ExoPlayerSignagePlugin extends Plugin {
                     }
                 } else if (instance.textureView != null) {
                     // Video player - remove TextureView but keep reference for reuse
-                    instance.player.clearVideoTextureView();
+                    instance.player.clearVideoTextureView(instance.textureView);
                     // Remove from view hierarchy
                     ViewGroup parent = (ViewGroup) instance.textureView.getParent();
                     if (parent != null) {
@@ -554,7 +554,7 @@ public class ExoPlayerSignagePlugin extends Plugin {
                 if ("audio".equals(instance.type)) {
                     if (instance.textureView != null) {
                         try {
-                            instance.player.clearVideoTextureView();
+                            instance.player.clearVideoTextureView(instance.textureView);
                         } catch (Exception e) {
                             // Ignore
                         }
@@ -579,7 +579,7 @@ public class ExoPlayerSignagePlugin extends Plugin {
                     // Clear video texture first (before removing from view)
                     if (instance.player != null) {
                         try {
-                            instance.player.clearVideoTextureView();
+                            instance.player.clearVideoTextureView(instance.textureView);
                         } catch (Exception e) {
                             // Ignore errors when clearing texture
                         }
@@ -637,7 +637,7 @@ public class ExoPlayerSignagePlugin extends Plugin {
                     // Ensure no TextureView exists for audio
                     if (instance.textureView != null) {
                         try {
-                            instance.player.clearVideoTextureView();
+                            instance.player.clearVideoTextureView(instance.textureView);
                         } catch (Exception e) {
                             // Ignore
                         }
@@ -697,7 +697,7 @@ public class ExoPlayerSignagePlugin extends Plugin {
                         // Player is not playing - ensure TextureView is removed
                         if (instance.textureView != null) {
                             try {
-                                instance.player.clearVideoTextureView();
+                                instance.player.clearVideoTextureView(instance.textureView);
                             } catch (Exception e) {
                                 // Ignore
                             }
@@ -739,7 +739,7 @@ public class ExoPlayerSignagePlugin extends Plugin {
             activity.runOnUiThread(() -> {
                 if (instance.player != null) {
                     if (instance.textureView != null) {
-                        instance.player.clearVideoTextureView();
+                        instance.player.clearVideoTextureView(instance.textureView);
                     }
                     instance.player.release();
                 }
@@ -755,7 +755,7 @@ public class ExoPlayerSignagePlugin extends Plugin {
         } else {
             if (instance.player != null) {
                 if (instance.textureView != null) {
-                    instance.player.clearVideoTextureView();
+                    instance.player.clearVideoTextureView(instance.textureView);
                 }
                 instance.player.release();
             }
@@ -773,7 +773,7 @@ public class ExoPlayerSignagePlugin extends Plugin {
                 for (PlayerInstance instance : players.values()) {
                     if (instance.player != null) {
                         if (instance.textureView != null) {
-                            instance.player.clearVideoTextureView();
+                            instance.player.clearVideoTextureView(instance.textureView);
                         }
                         instance.player.release();
                     }
@@ -795,7 +795,7 @@ public class ExoPlayerSignagePlugin extends Plugin {
             for (PlayerInstance instance : players.values()) {
                 if (instance.player != null) {
                     if (instance.textureView != null) {
-                        instance.player.clearVideoTextureView();
+                        instance.player.clearVideoTextureView(instance.textureView);
                     }
                     instance.player.release();
                 }
