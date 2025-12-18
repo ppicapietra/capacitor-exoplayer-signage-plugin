@@ -27,45 +27,74 @@ npx cap sync
 
 <docgen-index>
 
+* [`createPlayer(...)`](#createplayer)
 * [`play(...)`](#play)
-* [`stop()`](#stop)
-* [`pause()`](#pause)
+* [`stop(...)`](#stop)
+* [`pause(...)`](#pause)
 * [`setVolume(...)`](#setvolume)
+* [`hide(...)`](#hide)
+* [`show(...)`](#show)
+* [`releasePlayer(...)`](#releaseplayer)
+* [`addListener('audioPlaybackEnded', ...)`](#addlisteneraudioplaybackended-)
+* [`removeAllListeners()`](#removealllisteners)
 
 </docgen-index>
 
 <docgen-api>
 <!--Update the source file JSDoc comments and rerun docgen to update the docs below-->
 
+### createPlayer(...)
+
+```typescript
+createPlayer(options: { type: 'video' | 'audio'; }) => Promise<{ playerId: string; }>
+```
+
+| Param         | Type                                       |
+| ------------- | ------------------------------------------ |
+| **`options`** | <code>{ type: 'video' \| 'audio'; }</code> |
+
+**Returns:** <code>Promise&lt;{ playerId: string; }&gt;</code>
+
+--------------------
+
+
 ### play(...)
 
 ```typescript
-play(options: { url: string; }) => Promise<{ status: string; }>
+play(options: { playerId: string; url: string; visible?: boolean; }) => Promise<{ status: string; }>
 ```
 
-| Param         | Type                          |
-| ------------- | ----------------------------- |
-| **`options`** | <code>{ url: string; }</code> |
+| Param         | Type                                                               |
+| ------------- | ------------------------------------------------------------------ |
+| **`options`** | <code>{ playerId: string; url: string; visible?: boolean; }</code> |
 
 **Returns:** <code>Promise&lt;{ status: string; }&gt;</code>
 
 --------------------
 
 
-### stop()
+### stop(...)
 
 ```typescript
-stop() => Promise<void>
+stop(options: { playerId: string; }) => Promise<void>
 ```
+
+| Param         | Type                               |
+| ------------- | ---------------------------------- |
+| **`options`** | <code>{ playerId: string; }</code> |
 
 --------------------
 
 
-### pause()
+### pause(...)
 
 ```typescript
-pause() => Promise<void>
+pause(options: { playerId: string; }) => Promise<void>
 ```
+
+| Param         | Type                               |
+| ------------- | ---------------------------------- |
+| **`options`** | <code>{ playerId: string; }</code> |
 
 --------------------
 
@@ -73,12 +102,76 @@ pause() => Promise<void>
 ### setVolume(...)
 
 ```typescript
-setVolume(options: { volume: number; }) => Promise<void>
+setVolume(options: { playerId: string; volume: number; }) => Promise<void>
 ```
 
-| Param         | Type                             |
-| ------------- | -------------------------------- |
-| **`options`** | <code>{ volume: number; }</code> |
+| Param         | Type                                               |
+| ------------- | -------------------------------------------------- |
+| **`options`** | <code>{ playerId: string; volume: number; }</code> |
+
+--------------------
+
+
+### hide(...)
+
+```typescript
+hide(options: { playerId: string; }) => Promise<void>
+```
+
+| Param         | Type                               |
+| ------------- | ---------------------------------- |
+| **`options`** | <code>{ playerId: string; }</code> |
+
+--------------------
+
+
+### show(...)
+
+```typescript
+show(options: { playerId: string; }) => Promise<void>
+```
+
+| Param         | Type                               |
+| ------------- | ---------------------------------- |
+| **`options`** | <code>{ playerId: string; }</code> |
+
+--------------------
+
+
+### releasePlayer(...)
+
+```typescript
+releasePlayer(options: { playerId: string; }) => Promise<void>
+```
+
+| Param         | Type                               |
+| ------------- | ---------------------------------- |
+| **`options`** | <code>{ playerId: string; }</code> |
+
+--------------------
+
+
+### addListener('audioPlaybackEnded', ...)
+
+```typescript
+addListener(eventName: 'audioPlaybackEnded', listenerFunc: (data: { playerId: string; }) => void) => Promise<any>
+```
+
+| Param              | Type                                                  |
+| ------------------ | ----------------------------------------------------- |
+| **`eventName`**    | <code>'audioPlaybackEnded'</code>                     |
+| **`listenerFunc`** | <code>(data: { playerId: string; }) =&gt; void</code> |
+
+**Returns:** <code>Promise&lt;any&gt;</code>
+
+--------------------
+
+
+### removeAllListeners()
+
+```typescript
+removeAllListeners() => Promise<void>
+```
 
 --------------------
 

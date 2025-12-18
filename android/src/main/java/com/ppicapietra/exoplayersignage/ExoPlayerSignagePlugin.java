@@ -15,6 +15,7 @@ import android.widget.FrameLayout;
 
 import com.google.android.exoplayer2.ExoPlayer;
 import com.google.android.exoplayer2.MediaItem;
+import com.google.android.exoplayer2.Player;
 import com.google.android.exoplayer2.audio.AudioAttributes;
 import com.google.android.exoplayer2.source.DefaultMediaSourceFactory;
 import com.google.android.exoplayer2.upstream.cache.CacheDataSource;
@@ -25,14 +26,34 @@ import com.google.android.exoplayer2.upstream.DefaultHttpDataSource;
 import com.google.android.exoplayer2.C;
 
 import java.io.File;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
 
 @CapacitorPlugin(name = "ExoPlayerSignage")
 public class ExoPlayerSignagePlugin extends Plugin {
 
-    private ExoPlayer player;
+    // Shared cache for all players
     private SimpleCache cache;
     private CacheDataSource.Factory cacheDataSourceFactory;
-    private SurfaceView surfaceView;
+    
+    // Map to store player instances by ID
+    private Map<String, PlayerInstance> players = new HashMap<>();
+    
+    // Helper class to manage a single player instance
+    private static class PlayerInstance {
+        ExoPlayer player;
+        SurfaceView surfaceView;
+        String type; // "video" or "audio"
+        String id;
+        
+        PlayerInstance(ExoPlayer player, SurfaceView surfaceView, String type, String id) {
+            this.player = player;
+            this.surfaceView = surfaceView;
+            this.type = type;
+            this.id = id;
+        }
+    }
 
     private long getSafeCacheSize() {
         File cacheDir = getContext().getCacheDir();
@@ -54,83 +75,16 @@ public class ExoPlayerSignagePlugin extends Plugin {
                 .setCache(cache)
                 .setUpstreamDataSourceFactory(new DefaultHttpDataSource.Factory())
                 .setFlags(CacheDataSource.FLAG_BLOCK_ON_CACHE | CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR);
-
-        // ExoPlayer initialization and configuration should be on main thread
-        android.app.Activity activity = getBridge().getActivity();
-        if (activity != null) {
-            activity.runOnUiThread(() -> {
-                // Create SurfaceView for video rendering
-                surfaceView = new SurfaceView(getContext());
-                FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.MATCH_PARENT,
-                    FrameLayout.LayoutParams.MATCH_PARENT
-                );
-                surfaceView.setLayoutParams(params);
-                // Set z-order to ensure SurfaceView is above WebView for video rendering
-                surfaceView.setZOrderMediaOverlay(true); // Above WebView for video overlay
-                surfaceView.setZOrderOnTop(false); // Not on top (allows UI overlays)
-                
-                // Add SurfaceView to root view (initially hidden)
-                ViewGroup rootView = (ViewGroup) activity.findViewById(android.R.id.content);
-                if (rootView != null) {
-                    rootView.addView(surfaceView);
-                    surfaceView.setVisibility(android.view.View.GONE); // Hidden until video plays
-                }
-                
-                player = new ExoPlayer.Builder(getContext())
-                        .setMediaSourceFactory(
-                                new DefaultMediaSourceFactory(getContext())
-                                        .setDataSourceFactory(cacheDataSourceFactory))
-                        .build();
-                
-                // Associate SurfaceView with ExoPlayer
-                player.setVideoSurfaceView(surfaceView);
-
-                // Configure AudioAttributes for muted playback
-                AudioAttributes audioAttributes = new AudioAttributes.Builder()
-                        .setUsage(C.USAGE_MEDIA)
-                        .setContentType(C.CONTENT_TYPE_MOVIE)
-                        .build();
-                player.setAudioAttributes(audioAttributes, false); // false = don't handle audio focus
-
-                player.setPlayWhenReady(true);
-                player.setRepeatMode(ExoPlayer.REPEAT_MODE_OFF);
-                player.setVolume(0.0f); // Mute videos by default (signage videos should be silent)
-            });
-        } else {
-            // Fallback if activity is not available (shouldn't happen during load, but safety check)
-            player = new ExoPlayer.Builder(getContext())
-                    .setMediaSourceFactory(
-                            new DefaultMediaSourceFactory(getContext())
-                                    .setDataSourceFactory(cacheDataSourceFactory))
-                    .build();
-
-            // Configure AudioAttributes for muted playback
-            AudioAttributes audioAttributes = new AudioAttributes.Builder()
-                    .setUsage(C.USAGE_MEDIA)
-                    .setContentType(C.CONTENT_TYPE_MOVIE)
-                    .build();
-            player.setAudioAttributes(audioAttributes, false); // false = don't handle audio focus
-
-            player.setPlayWhenReady(true);
-            player.setRepeatMode(ExoPlayer.REPEAT_MODE_OFF);
-            player.setVolume(0.0f); // Mute videos by default (signage videos should be silent)
-        }
     }
 
     @PluginMethod
-    public void play(PluginCall call) {
-        String url = call.getString("url");
-        if (url == null) {
-            call.reject("URL requerida");
+    public void createPlayer(PluginCall call) {
+        String type = call.getString("type", "video");
+        if (!"video".equals(type) && !"audio".equals(type)) {
+            call.reject("Invalid type. Must be 'video' or 'audio'");
             return;
         }
         
-        // Get visible parameter (default to true for backward compatibility)
-        Boolean visibleValue = call.getBoolean("visible", true);
-        boolean visible = visibleValue != null ? visibleValue : true;
-        
-        // ExoPlayer must be accessed from the main thread
         android.app.Activity activity = getBridge().getActivity();
         if (activity == null) {
             call.reject("Activity not available");
@@ -139,27 +93,136 @@ public class ExoPlayerSignagePlugin extends Plugin {
         
         activity.runOnUiThread(() -> {
             try {
-                // Associate SurfaceView with player (always needed for playback)
-                if (surfaceView != null) {
-                    // Set visibility based on visible parameter
-                    surfaceView.setVisibility(visible ? android.view.View.VISIBLE : android.view.View.GONE);
-                    // Re-associate in case it was cleared
-                    // Note: We don't call bringToFront() to allow WebView overlays (like modals) to appear above the video
+                String playerId = UUID.randomUUID().toString();
+                ExoPlayer player = new ExoPlayer.Builder(getContext())
+                        .setMediaSourceFactory(
+                                new DefaultMediaSourceFactory(getContext())
+                                        .setDataSourceFactory(cacheDataSourceFactory))
+                        .build();
+                
+                SurfaceView surfaceView = null;
+                
+                if ("video".equals(type)) {
+                    // Create SurfaceView for video
+                    surfaceView = new SurfaceView(getContext());
+                    FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                        FrameLayout.LayoutParams.MATCH_PARENT,
+                        FrameLayout.LayoutParams.MATCH_PARENT
+                    );
+                    surfaceView.setLayoutParams(params);
+                    surfaceView.setZOrderMediaOverlay(true);
+                    surfaceView.setZOrderOnTop(false);
+                    
+                    // Add SurfaceView to root view (initially hidden)
+                    ViewGroup rootView = (ViewGroup) activity.findViewById(android.R.id.content);
+                    if (rootView != null) {
+                        rootView.addView(surfaceView);
+                        surfaceView.setVisibility(android.view.View.GONE);
+                    }
+                    
+                    // Associate SurfaceView with player
                     player.setVideoSurfaceView(surfaceView);
+                    
+                    // Configure for video (muted by default)
+                    AudioAttributes audioAttributes = new AudioAttributes.Builder()
+                            .setUsage(C.USAGE_MEDIA)
+                            .setContentType(C.CONTENT_TYPE_MOVIE)
+                            .build();
+                    player.setAudioAttributes(audioAttributes, false);
+                    player.setVolume(0.0f);
+                } else {
+                    // Audio player - no SurfaceView needed
+                    // Configure for audio (full volume)
+                    AudioAttributes audioAttributes = new AudioAttributes.Builder()
+                            .setUsage(C.USAGE_MEDIA)
+                            .setContentType(C.CONTENT_TYPE_MUSIC)
+                            .build();
+                    player.setAudioAttributes(audioAttributes, false);
+                    player.setVolume(1.0f);
+                    
+                    // Add listener for audio playback ended
+                    player.addListener(new Player.Listener() {
+                        @Override
+                        public void onPlaybackStateChanged(int playbackState) {
+                            if (playbackState == Player.STATE_ENDED) {
+                                JSObject data = new JSObject();
+                                data.put("playerId", playerId);
+                                notifyListeners("audioPlaybackEnded", data);
+                            }
+                        }
+                    });
                 }
                 
-                // Set media item first
+                player.setPlayWhenReady(true);
+                player.setRepeatMode(ExoPlayer.REPEAT_MODE_OFF);
+                
+                // Store player instance
+                PlayerInstance instance = new PlayerInstance(player, surfaceView, type, playerId);
+                players.put(playerId, instance);
+                
+                JSObject result = new JSObject();
+                result.put("playerId", playerId);
+                call.resolve(result);
+            } catch (Exception e) {
+                call.reject("Error creating player: " + e.getMessage(), e);
+            }
+        });
+    }
+
+    @PluginMethod
+    public void play(PluginCall call) {
+        String playerId = call.getString("playerId");
+        String url = call.getString("url");
+        
+        if (playerId == null) {
+            call.reject("playerId requerido");
+            return;
+        }
+        
+        if (url == null) {
+            call.reject("URL requerida");
+            return;
+        }
+        
+        PlayerInstance instance = players.get(playerId);
+        if (instance == null) {
+            call.reject("Player not found: " + playerId);
+            return;
+        }
+        
+        Boolean visibleValue = call.getBoolean("visible", true);
+        boolean visible = visibleValue != null ? visibleValue : true;
+        
+        android.app.Activity activity = getBridge().getActivity();
+        if (activity == null) {
+            call.reject("Activity not available");
+            return;
+        }
+        
+        activity.runOnUiThread(() -> {
+            try {
+                ExoPlayer player = instance.player;
+                
+                if ("video".equals(instance.type)) {
+                    // Video playback
+                    if (instance.surfaceView != null) {
+                        instance.surfaceView.setVisibility(visible ? android.view.View.VISIBLE : android.view.View.GONE);
+                        player.setVideoSurfaceView(instance.surfaceView);
+                    }
+                } else {
+                    // Audio playback - ensure SurfaceView is not used
+                    if (instance.surfaceView != null) {
+                        instance.surfaceView.setVisibility(android.view.View.GONE);
+                        player.clearVideoSurfaceView(instance.surfaceView);
+                    }
+                }
+                
+                // Set media item
                 player.setMediaItem(MediaItem.fromUri(Uri.parse(url)));
                 player.prepare();
                 
-                // Ensure volume is set to 0 AFTER prepare() to ensure it takes effect
-                player.setVolume(0.0f); // Ensure videos are muted (signage videos should be silent)
-                
                 // Start playback
                 player.play();
-                
-                // Set volume again after play() as additional safeguard
-                player.setVolume(0.0f);
                 
                 call.resolve();
             } catch (Exception e) {
@@ -170,7 +233,18 @@ public class ExoPlayerSignagePlugin extends Plugin {
 
     @PluginMethod
     public void pause(PluginCall call) {
-        // ExoPlayer must be accessed from the main thread
+        String playerId = call.getString("playerId");
+        if (playerId == null) {
+            call.reject("playerId requerido");
+            return;
+        }
+        
+        PlayerInstance instance = players.get(playerId);
+        if (instance == null) {
+            call.reject("Player not found: " + playerId);
+            return;
+        }
+        
         android.app.Activity activity = getBridge().getActivity();
         if (activity == null) {
             call.reject("Activity not available");
@@ -179,7 +253,7 @@ public class ExoPlayerSignagePlugin extends Plugin {
         
         activity.runOnUiThread(() -> {
             try {
-                player.pause();
+                instance.player.pause();
                 call.resolve();
             } catch (Exception e) {
                 call.reject("Error pausing: " + e.getMessage(), e);
@@ -189,7 +263,18 @@ public class ExoPlayerSignagePlugin extends Plugin {
 
     @PluginMethod
     public void stop(PluginCall call) {
-        // ExoPlayer must be accessed from the main thread
+        String playerId = call.getString("playerId");
+        if (playerId == null) {
+            call.reject("playerId requerido");
+            return;
+        }
+        
+        PlayerInstance instance = players.get(playerId);
+        if (instance == null) {
+            call.reject("Player not found: " + playerId);
+            return;
+        }
+        
         android.app.Activity activity = getBridge().getActivity();
         if (activity == null) {
             call.reject("Activity not available");
@@ -198,11 +283,11 @@ public class ExoPlayerSignagePlugin extends Plugin {
         
         activity.runOnUiThread(() -> {
             try {
-                player.stop();
-                // Hide SurfaceView when stopped
-                if (surfaceView != null) {
-                    surfaceView.setVisibility(android.view.View.GONE);
-                    player.clearVideoSurfaceView(surfaceView);
+                instance.player.stop();
+                // Hide SurfaceView when stopped (for video players)
+                if (instance.surfaceView != null) {
+                    instance.surfaceView.setVisibility(android.view.View.GONE);
+                    instance.player.clearVideoSurfaceView(instance.surfaceView);
                 }
                 call.resolve();
             } catch (Exception e) {
@@ -213,10 +298,21 @@ public class ExoPlayerSignagePlugin extends Plugin {
 
     @PluginMethod
     public void setVolume(PluginCall call) {
+        String playerId = call.getString("playerId");
+        if (playerId == null) {
+            call.reject("playerId requerido");
+            return;
+        }
+        
+        PlayerInstance instance = players.get(playerId);
+        if (instance == null) {
+            call.reject("Player not found: " + playerId);
+            return;
+        }
+        
         Double volumeValue = call.getDouble("volume", 1.0);
         float vol = volumeValue != null ? volumeValue.floatValue() : 1.0f;
         
-        // ExoPlayer must be accessed from the main thread
         android.app.Activity activity = getBridge().getActivity();
         if (activity == null) {
             call.reject("Activity not available");
@@ -225,7 +321,7 @@ public class ExoPlayerSignagePlugin extends Plugin {
         
         activity.runOnUiThread(() -> {
             try {
-                player.setVolume(vol);
+                instance.player.setVolume(vol);
                 call.resolve();
             } catch (Exception e) {
                 call.reject("Error setting volume: " + e.getMessage(), e);
@@ -235,7 +331,18 @@ public class ExoPlayerSignagePlugin extends Plugin {
 
     @PluginMethod
     public void hide(PluginCall call) {
-        // Hide SurfaceView without stopping playback
+        String playerId = call.getString("playerId");
+        if (playerId == null) {
+            call.reject("playerId requerido");
+            return;
+        }
+        
+        PlayerInstance instance = players.get(playerId);
+        if (instance == null) {
+            call.reject("Player not found: " + playerId);
+            return;
+        }
+        
         android.app.Activity activity = getBridge().getActivity();
         if (activity == null) {
             call.reject("Activity not available");
@@ -244,8 +351,8 @@ public class ExoPlayerSignagePlugin extends Plugin {
         
         activity.runOnUiThread(() -> {
             try {
-                if (surfaceView != null) {
-                    surfaceView.setVisibility(android.view.View.GONE);
+                if (instance.surfaceView != null) {
+                    instance.surfaceView.setVisibility(android.view.View.GONE);
                 }
                 call.resolve();
             } catch (Exception e) {
@@ -256,7 +363,18 @@ public class ExoPlayerSignagePlugin extends Plugin {
 
     @PluginMethod
     public void show(PluginCall call) {
-        // Show SurfaceView without restarting playback
+        String playerId = call.getString("playerId");
+        if (playerId == null) {
+            call.reject("playerId requerido");
+            return;
+        }
+        
+        PlayerInstance instance = players.get(playerId);
+        if (instance == null) {
+            call.reject("Player not found: " + playerId);
+            return;
+        }
+        
         android.app.Activity activity = getBridge().getActivity();
         if (activity == null) {
             call.reject("Activity not available");
@@ -265,10 +383,9 @@ public class ExoPlayerSignagePlugin extends Plugin {
         
         activity.runOnUiThread(() -> {
             try {
-                if (surfaceView != null && player != null) {
-                    surfaceView.setVisibility(android.view.View.VISIBLE);
-                    // Re-associate SurfaceView with player in case it was cleared
-                    player.setVideoSurfaceView(surfaceView);
+                if (instance.surfaceView != null && instance.player != null) {
+                    instance.surfaceView.setVisibility(android.view.View.VISIBLE);
+                    instance.player.setVideoSurfaceView(instance.surfaceView);
                 }
                 call.resolve();
             } catch (Exception e) {
@@ -277,45 +394,88 @@ public class ExoPlayerSignagePlugin extends Plugin {
         });
     }
 
-    @Override
-    protected void handleOnDestroy() {
-        // ExoPlayer must be accessed from the main thread
+    @PluginMethod
+    public void releasePlayer(PluginCall call) {
+        String playerId = call.getString("playerId");
+        if (playerId == null) {
+            call.reject("playerId requerido");
+            return;
+        }
+        
+        PlayerInstance instance = players.get(playerId);
+        if (instance == null) {
+            call.reject("Player not found: " + playerId);
+            return;
+        }
+        
         android.app.Activity activity = getBridge().getActivity();
         if (activity != null) {
             activity.runOnUiThread(() -> {
-                if (player != null) {
-                    // Clear video surface before releasing
-                    if (surfaceView != null) {
-                        player.clearVideoSurfaceView(surfaceView);
+                if (instance.player != null) {
+                    if (instance.surfaceView != null) {
+                        instance.player.clearVideoSurfaceView(instance.surfaceView);
                     }
-                    player.release();
-                    player = null;
+                    instance.player.release();
                 }
-                if (surfaceView != null) {
-                    // Remove SurfaceView from view hierarchy
-                    ViewGroup parent = (ViewGroup) surfaceView.getParent();
+                if (instance.surfaceView != null) {
+                    ViewGroup parent = (ViewGroup) instance.surfaceView.getParent();
                     if (parent != null) {
-                        parent.removeView(surfaceView);
+                        parent.removeView(instance.surfaceView);
                     }
-                    surfaceView = null;
                 }
+                players.remove(playerId);
+                call.resolve();
+            });
+        } else {
+            if (instance.player != null) {
+                if (instance.surfaceView != null) {
+                    instance.player.clearVideoSurfaceView(instance.surfaceView);
+                }
+                instance.player.release();
+            }
+            players.remove(playerId);
+            call.resolve();
+        }
+    }
+
+    @Override
+    protected void handleOnDestroy() {
+        android.app.Activity activity = getBridge().getActivity();
+        if (activity != null) {
+            activity.runOnUiThread(() -> {
+                // Release all players
+                for (PlayerInstance instance : players.values()) {
+                    if (instance.player != null) {
+                        if (instance.surfaceView != null) {
+                            instance.player.clearVideoSurfaceView(instance.surfaceView);
+                        }
+                        instance.player.release();
+                    }
+                    if (instance.surfaceView != null) {
+                        ViewGroup parent = (ViewGroup) instance.surfaceView.getParent();
+                        if (parent != null) {
+                            parent.removeView(instance.surfaceView);
+                        }
+                    }
+                }
+                players.clear();
+                
                 if (cache != null) {
                     cache.release();
                     cache = null;
                 }
             });
         } else {
-            // Fallback if activity is not available (shouldn't happen, but safety check)
-            if (player != null) {
-                if (surfaceView != null) {
-                    player.clearVideoSurfaceView(surfaceView);
+            for (PlayerInstance instance : players.values()) {
+                if (instance.player != null) {
+                    if (instance.surfaceView != null) {
+                        instance.player.clearVideoSurfaceView(instance.surfaceView);
+                    }
+                    instance.player.release();
                 }
-                player.release();
-                player = null;
             }
-            if (surfaceView != null) {
-                surfaceView = null;
-            }
+            players.clear();
+            
             if (cache != null) {
                 cache.release();
                 cache = null;
