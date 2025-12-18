@@ -61,12 +61,12 @@ createPlayer(options: { type: 'video' | 'audio'; volume?: number; }) => Promise<
 ### play(...)
 
 ```typescript
-play(options: { playerId: string; url: string; visible?: boolean; }) => Promise<{ status: string; }>
+play(options: { playerId: string; url: string; visible?: boolean; authToken?: string; }) => Promise<{ status: string; }>
 ```
 
-| Param         | Type                                                               |
-| ------------- | ------------------------------------------------------------------ |
-| **`options`** | <code>{ playerId: string; url: string; visible?: boolean; }</code> |
+| Param         | Type                                                                                   |
+| ------------- | -------------------------------------------------------------------------------------- |
+| **`options`** | <code>{ playerId: string; url: string; visible?: boolean; authToken?: string; }</code> |
 
 **Returns:** <code>Promise&lt;{ status: string; }&gt;</code>
 

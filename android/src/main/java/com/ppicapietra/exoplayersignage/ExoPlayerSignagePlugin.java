@@ -18,6 +18,7 @@ import com.google.android.exoplayer2.MediaItem;
 import com.google.android.exoplayer2.Player;
 import com.google.android.exoplayer2.audio.AudioAttributes;
 import com.google.android.exoplayer2.source.DefaultMediaSourceFactory;
+import com.google.android.exoplayer2.source.MediaSource;
 import com.google.android.exoplayer2.upstream.cache.CacheDataSource;
 import com.google.android.exoplayer2.upstream.cache.LeastRecentlyUsedCacheEvictor;
 import com.google.android.exoplayer2.upstream.cache.SimpleCache;
@@ -71,9 +72,16 @@ public class ExoPlayerSignagePlugin extends Plugin {
                 new LeastRecentlyUsedCacheEvictor(getSafeCacheSize()),
                 new StandaloneDatabaseProvider(getContext()));
 
+        // Create HttpDataSourceFactory that can accept custom headers
+        DefaultHttpDataSource.Factory httpDataSourceFactory = new DefaultHttpDataSource.Factory();
+        httpDataSourceFactory.setUserAgent("ExoPlayerSignage");
+        httpDataSourceFactory.setConnectTimeoutMs(DefaultHttpDataSource.DEFAULT_CONNECT_TIMEOUT_MILLIS);
+        httpDataSourceFactory.setReadTimeoutMs(DefaultHttpDataSource.DEFAULT_READ_TIMEOUT_MILLIS);
+        httpDataSourceFactory.setAllowCrossProtocolRedirects(true);
+        
         cacheDataSourceFactory = new CacheDataSource.Factory()
                 .setCache(cache)
-                .setUpstreamDataSourceFactory(new DefaultHttpDataSource.Factory())
+                .setUpstreamDataSourceFactory(httpDataSourceFactory)
                 .setFlags(CacheDataSource.FLAG_BLOCK_ON_CACHE | CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR);
     }
 
@@ -246,8 +254,48 @@ public class ExoPlayerSignagePlugin extends Plugin {
                     player.stop();
                 }
                 
-                // Set media item
-                player.setMediaItem(MediaItem.fromUri(Uri.parse(url)));
+                // Get auth token from call if provided
+                String authToken = call.getString("authToken");
+                
+                // Create MediaItem
+                MediaItem mediaItem = MediaItem.fromUri(Uri.parse(url));
+                
+                // If auth token is provided, create a new MediaSourceFactory with auth headers
+                if (authToken != null && !authToken.isEmpty()) {
+                    // Create HttpDataSourceFactory with auth header
+                    DefaultHttpDataSource.Factory httpFactory = new DefaultHttpDataSource.Factory();
+                    httpFactory.setUserAgent("ExoPlayerSignage");
+                    httpFactory.setConnectTimeoutMs(DefaultHttpDataSource.DEFAULT_CONNECT_TIMEOUT_MILLIS);
+                    httpFactory.setReadTimeoutMs(DefaultHttpDataSource.DEFAULT_READ_TIMEOUT_MILLIS);
+                    httpFactory.setAllowCrossProtocolRedirects(true);
+                    java.util.Map<String, String> headers = new java.util.HashMap<>();
+                    headers.put("Authorization", "Bearer " + authToken);
+                    httpFactory.setDefaultRequestProperties(headers);
+                    
+                    // Create CacheDataSourceFactory with auth
+                    CacheDataSource.Factory authCacheFactory = new CacheDataSource.Factory()
+                            .setCache(cache)
+                            .setUpstreamDataSourceFactory(httpFactory)
+                            .setFlags(CacheDataSource.FLAG_BLOCK_ON_CACHE | CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR);
+                    
+                    // Create MediaSourceFactory with auth and apply to player
+                    DefaultMediaSourceFactory mediaSourceFactory = new DefaultMediaSourceFactory(getContext())
+                            .setDataSourceFactory(authCacheFactory);
+                    
+                    // Replace player's MediaSourceFactory temporarily
+                    // Note: This requires storing the original factory to restore later
+                    // For now, we'll create a new player with the auth factory if needed
+                    // Actually, we can use the MediaItem.Builder to set custom data source
+                    // But ExoPlayer 2.x doesn't support this directly
+                    // Workaround: Create a new MediaSource with custom factory
+                    com.google.android.exoplayer2.source.MediaSource mediaSource = 
+                            mediaSourceFactory.createMediaSource(mediaItem);
+                    player.setMediaSource(mediaSource);
+                } else {
+                    // Use default cache factory (no auth)
+                    player.setMediaItem(mediaItem);
+                }
+                
                 player.prepare();
                 
                 // Ensure volume is set correctly (especially for audio after video)

@@ -1,6 +1,6 @@
 export interface ExoPlayerSignagePlugin {
   createPlayer(options: { type: 'video' | 'audio'; volume?: number }): Promise<{ playerId: string }>;
-  play(options: { playerId: string; url: string; visible?: boolean }): Promise<{ status: string }>;
+  play(options: { playerId: string; url: string; visible?: boolean; authToken?: string }): Promise<{ status: string }>;
   stop(options: { playerId: string }): Promise<void>;
   pause(options: { playerId: string }): Promise<void>;
   setVolume(options: { playerId: string; volume: number }): Promise<void>;
