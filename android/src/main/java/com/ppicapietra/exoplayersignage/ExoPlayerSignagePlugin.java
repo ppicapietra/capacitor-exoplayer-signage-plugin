@@ -241,11 +241,23 @@ public class ExoPlayerSignagePlugin extends Plugin {
                     }
                 }
                 
+                // Stop any current playback before setting new media item
+                if (player.getPlaybackState() != Player.STATE_IDLE) {
+                    player.stop();
+                }
+                
                 // Set media item
                 player.setMediaItem(MediaItem.fromUri(Uri.parse(url)));
                 player.prepare();
                 
-                // Start playback (volume is already set when player was created or via setVolume)
+                // Ensure volume is set correctly (especially for audio after video)
+                if ("audio".equals(instance.type)) {
+                    player.setVolume(1.0f);
+                } else if ("video".equals(instance.type)) {
+                    player.setVolume(0.0f);
+                }
+                
+                // Start playback
                 player.play();
                 
                 call.resolve();
