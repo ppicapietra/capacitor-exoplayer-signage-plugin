@@ -113,25 +113,8 @@ public class ExoPlayerSignagePlugin extends Plugin {
                 SurfaceView surfaceView = null;
                 
                 if ("video".equals(type)) {
-                    // Create SurfaceView for video
-                    surfaceView = new SurfaceView(getContext());
-                    FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
-                        FrameLayout.LayoutParams.MATCH_PARENT,
-                        FrameLayout.LayoutParams.MATCH_PARENT
-                    );
-                    surfaceView.setLayoutParams(params);
-                    surfaceView.setZOrderMediaOverlay(true);
-                    surfaceView.setZOrderOnTop(false);
-                    
-                    // Add SurfaceView to root view (initially hidden)
-                    ViewGroup rootView = (ViewGroup) activity.findViewById(android.R.id.content);
-                    if (rootView != null) {
-                        rootView.addView(surfaceView);
-                        surfaceView.setVisibility(android.view.View.GONE);
-                    }
-                    
-                    // Associate SurfaceView with player
-                    player.setVideoSurfaceView(surfaceView);
+                    // Don't create SurfaceView here - it will be created when video is played
+                    // This prevents SurfaceView from blocking images or modals
                     
                     // Configure AudioAttributes for video
                     AudioAttributes audioAttributes = new AudioAttributes.Builder()
@@ -215,16 +198,46 @@ public class ExoPlayerSignagePlugin extends Plugin {
                 ExoPlayer player = instance.player;
                 
                 if ("video".equals(instance.type)) {
-                    // Video playback
-                    if (instance.surfaceView != null) {
-                        instance.surfaceView.setVisibility(visible ? android.view.View.VISIBLE : android.view.View.GONE);
-                        player.setVideoSurfaceView(instance.surfaceView);
+                    // Video playback - create SurfaceView if it doesn't exist
+                    if (instance.surfaceView == null) {
+                        instance.surfaceView = new SurfaceView(getContext());
+                        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                            FrameLayout.LayoutParams.MATCH_PARENT,
+                            FrameLayout.LayoutParams.MATCH_PARENT
+                        );
+                        instance.surfaceView.setLayoutParams(params);
+                        instance.surfaceView.setZOrderMediaOverlay(true);
+                        instance.surfaceView.setZOrderOnTop(false);
+                        
+                        // Add SurfaceView to root view
+                        ViewGroup rootView = (ViewGroup) activity.findViewById(android.R.id.content);
+                        if (rootView != null) {
+                            rootView.addView(instance.surfaceView);
+                        }
+                    } else {
+                        // SurfaceView exists but might not be in layout - re-add if needed
+                        ViewGroup parent = (ViewGroup) instance.surfaceView.getParent();
+                        if (parent == null) {
+                            ViewGroup rootView = (ViewGroup) activity.findViewById(android.R.id.content);
+                            if (rootView != null) {
+                                rootView.addView(instance.surfaceView);
+                            }
+                        }
                     }
+                    
+                    // Show/hide SurfaceView based on visible parameter
+                    instance.surfaceView.setVisibility(visible ? android.view.View.VISIBLE : android.view.View.GONE);
+                    player.setVideoSurfaceView(instance.surfaceView);
                 } else {
-                    // Audio playback - ensure SurfaceView is not used
+                    // Audio playback - ensure SurfaceView is removed
                     if (instance.surfaceView != null) {
-                        instance.surfaceView.setVisibility(android.view.View.GONE);
+                        // Remove SurfaceView from layout for audio playback
+                        ViewGroup parent = (ViewGroup) instance.surfaceView.getParent();
+                        if (parent != null) {
+                            parent.removeView(instance.surfaceView);
+                        }
                         player.clearVideoSurfaceView(instance.surfaceView);
+                        // Keep reference but removed from layout
                     }
                 }
                 
@@ -295,10 +308,16 @@ public class ExoPlayerSignagePlugin extends Plugin {
         activity.runOnUiThread(() -> {
             try {
                 instance.player.stop();
-                // Hide SurfaceView when stopped (for video players)
+                // Remove SurfaceView when stopped (for video players)
                 if (instance.surfaceView != null) {
-                    instance.surfaceView.setVisibility(android.view.View.GONE);
                     instance.player.clearVideoSurfaceView(instance.surfaceView);
+                    // Remove from view hierarchy
+                    ViewGroup parent = (ViewGroup) instance.surfaceView.getParent();
+                    if (parent != null) {
+                        parent.removeView(instance.surfaceView);
+                    }
+                    // Don't set to null - we'll reuse it when video plays again
+                    // instance.surfaceView = null;
                 }
                 call.resolve();
             } catch (Exception e) {
@@ -362,8 +381,21 @@ public class ExoPlayerSignagePlugin extends Plugin {
         
         activity.runOnUiThread(() -> {
             try {
+                // Pause playback to ensure SurfaceView doesn't block UI
+                if (instance.player != null) {
+                    instance.player.pause();
+                }
+                // Remove SurfaceView from layout to ensure it doesn't block modals/images
                 if (instance.surfaceView != null) {
-                    instance.surfaceView.setVisibility(android.view.View.GONE);
+                    // Clear video surface first
+                    instance.player.clearVideoSurfaceView(instance.surfaceView);
+                    // Remove from view hierarchy
+                    ViewGroup parent = (ViewGroup) instance.surfaceView.getParent();
+                    if (parent != null) {
+                        parent.removeView(instance.surfaceView);
+                    }
+                    // Don't set to null - we'll reuse it when video plays again
+                    // instance.surfaceView = null;
                 }
                 call.resolve();
             } catch (Exception e) {
@@ -394,7 +426,35 @@ public class ExoPlayerSignagePlugin extends Plugin {
         
         activity.runOnUiThread(() -> {
             try {
-                if (instance.surfaceView != null && instance.player != null) {
+                // Only show SurfaceView for video players
+                if ("video".equals(instance.type) && instance.player != null) {
+                    // Recreate SurfaceView if it was removed
+                    if (instance.surfaceView == null) {
+                        instance.surfaceView = new SurfaceView(getContext());
+                        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                            FrameLayout.LayoutParams.MATCH_PARENT,
+                            FrameLayout.LayoutParams.MATCH_PARENT
+                        );
+                        instance.surfaceView.setLayoutParams(params);
+                        instance.surfaceView.setZOrderMediaOverlay(true);
+                        instance.surfaceView.setZOrderOnTop(false);
+                        
+                        // Add SurfaceView to root view
+                        ViewGroup rootView = (ViewGroup) activity.findViewById(android.R.id.content);
+                        if (rootView != null) {
+                            rootView.addView(instance.surfaceView);
+                        }
+                    } else {
+                        // SurfaceView exists but might not be in layout - re-add if needed
+                        ViewGroup parent = (ViewGroup) instance.surfaceView.getParent();
+                        if (parent == null) {
+                            ViewGroup rootView = (ViewGroup) activity.findViewById(android.R.id.content);
+                            if (rootView != null) {
+                                rootView.addView(instance.surfaceView);
+                            }
+                        }
+                    }
+                    
                     instance.surfaceView.setVisibility(android.view.View.VISIBLE);
                     instance.player.setVideoSurfaceView(instance.surfaceView);
                 }
