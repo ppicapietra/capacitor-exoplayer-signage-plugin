@@ -9,7 +9,7 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 
 import android.net.Uri;
 import android.content.Context;
-import android.view.SurfaceView;
+import android.view.TextureView;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
@@ -44,20 +44,20 @@ public class ExoPlayerSignagePlugin extends Plugin {
     // Helper class to manage a single player instance
     private static class PlayerInstance {
         ExoPlayer player;
-        SurfaceView surfaceView;
+        TextureView textureView; // Changed from TextureView to TextureView for better z-order integration
         String type; // "video" or "audio"
         String id;
         
-        PlayerInstance(ExoPlayer player, SurfaceView surfaceView, String type, String id) {
+        PlayerInstance(ExoPlayer player, TextureView textureView, String type, String id) {
             this.player = player;
-            this.surfaceView = surfaceView;
+            this.textureView = textureView;
             this.type = type;
             this.id = id;
         }
     }
     
-    // Helper method to remove ALL SurfaceViews from the view hierarchy (for debugging)
-    private void removeAllSurfaceViewsFromRoot() {
+    // Helper method to remove ALL TextureViews from the view hierarchy (for debugging)
+    private void removeAllTextureViewsFromRoot() {
         android.app.Activity activity = getBridge().getActivity();
         if (activity == null) return;
         
@@ -65,14 +65,14 @@ public class ExoPlayerSignagePlugin extends Plugin {
             try {
                 ViewGroup rootView = (ViewGroup) activity.findViewById(android.R.id.content);
                 if (rootView != null) {
-                    // Find and remove all SurfaceViews
-                    java.util.ArrayList<SurfaceView> surfaceViews = new java.util.ArrayList<>();
-                    findSurfaceViews(rootView, surfaceViews);
-                    for (SurfaceView sv : surfaceViews) {
+                    // Find and remove all TextureViews
+                    java.util.ArrayList<TextureView> textureViews = new java.util.ArrayList<>();
+                    findTextureViews(rootView, textureViews);
+                    for (TextureView tv : textureViews) {
                         try {
-                            ViewGroup parent = (ViewGroup) sv.getParent();
+                            ViewGroup parent = (ViewGroup) tv.getParent();
                             if (parent != null) {
-                                parent.removeView(sv);
+                                parent.removeView(tv);
                             }
                         } catch (Exception e) {
                             // Ignore
@@ -85,13 +85,13 @@ public class ExoPlayerSignagePlugin extends Plugin {
         });
     }
     
-    private void findSurfaceViews(ViewGroup parent, java.util.ArrayList<SurfaceView> result) {
+    private void findTextureViews(ViewGroup parent, java.util.ArrayList<TextureView> result) {
         for (int i = 0; i < parent.getChildCount(); i++) {
             android.view.View child = parent.getChildAt(i);
-            if (child instanceof SurfaceView) {
-                result.add((SurfaceView) child);
+            if (child instanceof TextureView) {
+                result.add((TextureView) child);
             } else if (child instanceof ViewGroup) {
-                findSurfaceViews((ViewGroup) child, result);
+                findTextureViews((ViewGroup) child, result);
             }
         }
     }
@@ -158,11 +158,11 @@ public class ExoPlayerSignagePlugin extends Plugin {
                                         .setDataSourceFactory(cacheDataSourceFactory))
                         .build();
                 
-                SurfaceView surfaceView = null;
+                TextureView textureView = null;
                 
                 if ("video".equals(type)) {
-                    // Don't create SurfaceView here - it will be created when video is played
-                    // This prevents SurfaceView from blocking images or modals
+                    // Don't create TextureView here - it will be created when video is played
+                    // TextureView respects z-order better than TextureView, allowing HTML elements to appear on top
                     
                     // Configure AudioAttributes for video
                     AudioAttributes audioAttributes = new AudioAttributes.Builder()
@@ -171,7 +171,7 @@ public class ExoPlayerSignagePlugin extends Plugin {
                             .build();
                     player.setAudioAttributes(audioAttributes, false);
                 } else {
-                    // Audio player - no SurfaceView needed
+                    // Audio player - no TextureView needed
                     // Configure AudioAttributes for audio
                     AudioAttributes audioAttributes = new AudioAttributes.Builder()
                             .setUsage(C.USAGE_MEDIA)
@@ -199,7 +199,7 @@ public class ExoPlayerSignagePlugin extends Plugin {
                 player.setRepeatMode(ExoPlayer.REPEAT_MODE_OFF);
                 
                 // Store player instance
-                PlayerInstance instance = new PlayerInstance(player, surfaceView, type, playerId);
+                PlayerInstance instance = new PlayerInstance(player, textureView, type, playerId);
                 players.put(playerId, instance);
                 
                 JSObject result = new JSObject();
@@ -246,66 +246,88 @@ public class ExoPlayerSignagePlugin extends Plugin {
                 ExoPlayer player = instance.player;
                 
                 if ("video".equals(instance.type)) {
-                    // Video playback - create SurfaceView if it doesn't exist
-                    if (instance.surfaceView == null) {
-                        instance.surfaceView = new SurfaceView(getContext());
-                        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
-                            FrameLayout.LayoutParams.MATCH_PARENT,
-                            FrameLayout.LayoutParams.MATCH_PARENT
-                        );
-                        instance.surfaceView.setLayoutParams(params);
-                        instance.surfaceView.setZOrderMediaOverlay(true);
-                        instance.surfaceView.setZOrderOnTop(false);
-                        
-                        // Add SurfaceView to root view
-                        ViewGroup rootView = (ViewGroup) activity.findViewById(android.R.id.content);
-                        if (rootView != null) {
-                            rootView.addView(instance.surfaceView);
-                        }
-                    } else {
-                        // SurfaceView exists but might not be in layout - re-add if needed
-                        ViewGroup parent = (ViewGroup) instance.surfaceView.getParent();
-                        if (parent == null) {
-                            ViewGroup rootView = (ViewGroup) activity.findViewById(android.R.id.content);
-                            if (rootView != null) {
-                                rootView.addView(instance.surfaceView);
+                    // Video playback - create TextureView ONLY if visible is true
+                    // TextureView respects z-order, allowing HTML elements (modal, images) to appear on top
+                    if (!visible) {
+                        // Don't create or show TextureView if not visible
+                        if (instance.textureView != null) {
+                            // Remove TextureView if it exists
+                            try {
+                                player.clearVideoTextureView();
+                            } catch (Exception e) {
+                                // Ignore
+                            }
+                            instance.textureView.setVisibility(android.view.View.GONE);
+                            ViewGroup parent = (ViewGroup) instance.textureView.getParent();
+                            if (parent != null) {
+                                try {
+                                    parent.removeView(instance.textureView);
+                                } catch (Exception e) {
+                                    // Ignore
+                                }
                             }
                         }
+                    } else {
+                        // visible is true - create TextureView if needed
+                        if (instance.textureView == null) {
+                            instance.textureView = new TextureView(getContext());
+                            FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                                FrameLayout.LayoutParams.MATCH_PARENT,
+                                FrameLayout.LayoutParams.MATCH_PARENT
+                            );
+                            instance.textureView.setLayoutParams(params);
+                            // TextureView doesn't need z-order settings - it respects normal view hierarchy
+                            
+                            // Add TextureView to root view
+                            ViewGroup rootView = (ViewGroup) activity.findViewById(android.R.id.content);
+                            if (rootView != null) {
+                                rootView.addView(instance.textureView);
+                            }
+                        } else {
+                            // TextureView exists but might not be in layout - re-add if needed
+                            ViewGroup parent = (ViewGroup) instance.textureView.getParent();
+                            if (parent == null) {
+                                ViewGroup rootView = (ViewGroup) activity.findViewById(android.R.id.content);
+                                if (rootView != null) {
+                                    rootView.addView(instance.textureView);
+                                }
+                            }
+                        }
+                        
+                        // Show TextureView and associate with player
+                        instance.textureView.setVisibility(android.view.View.VISIBLE);
+                        player.setVideoTextureView(instance.textureView);
                     }
-                    
-                    // Show/hide SurfaceView based on visible parameter
-                    instance.surfaceView.setVisibility(visible ? android.view.View.VISIBLE : android.view.View.GONE);
-                    player.setVideoSurfaceView(instance.surfaceView);
                 } else {
-                    // Audio playback - ensure NO SurfaceView exists or is visible
-                    // Audio players should NEVER have a SurfaceView
-                    if (instance.surfaceView != null) {
-                        // Clear video surface first
+                    // Audio playback - ensure NO TextureView exists or is visible
+                    // Audio players should NEVER have a TextureView
+                    if (instance.textureView != null) {
+                        // Clear video texture first
                         try {
-                            player.clearVideoSurfaceView(instance.surfaceView);
+                            player.clearVideoTextureView();
                         } catch (Exception e) {
                             // Ignore errors
                         }
                         
                         // Remove from layout if it exists
-                        ViewGroup parent = (ViewGroup) instance.surfaceView.getParent();
+                        ViewGroup parent = (ViewGroup) instance.textureView.getParent();
                         if (parent != null) {
                             try {
-                                parent.removeView(instance.surfaceView);
+                                parent.removeView(instance.textureView);
                             } catch (Exception e) {
                                 // Ignore errors
                             }
                         }
                         
                         // Set visibility to GONE as additional safety
-                        instance.surfaceView.setVisibility(android.view.View.GONE);
+                        instance.textureView.setVisibility(android.view.View.GONE);
                         
                         // IMPORTANT: Set to null to ensure it's never reused for audio
-                        instance.surfaceView = null;
+                        instance.textureView = null;
                     }
                     
-                    // Ensure no video surface is set on the player
-                    player.clearVideoSurfaceView(null);
+                    // Ensure no video texture is set on the player
+                    player.clearVideoTextureView();
                 }
                 
                 // Stop any current playback before setting new media item
@@ -427,39 +449,39 @@ public class ExoPlayerSignagePlugin extends Plugin {
         activity.runOnUiThread(() -> {
             try {
                 instance.player.stop();
-                // Remove SurfaceView when stopped (for video players only)
-                // CRITICAL: Audio players should NEVER have a SurfaceView
+                // Remove TextureView when stopped (for video players only)
+                // CRITICAL: Audio players should NEVER have a TextureView
                 if ("audio".equals(instance.type)) {
-                    if (instance.surfaceView != null) {
+                    if (instance.textureView != null) {
                         try {
-                            instance.player.clearVideoSurfaceView(instance.surfaceView);
+                            instance.player.clearVideoTextureView();
                         } catch (Exception e) {
                             // Ignore
                         }
-                        ViewGroup parent = (ViewGroup) instance.surfaceView.getParent();
+                        ViewGroup parent = (ViewGroup) instance.textureView.getParent();
                         if (parent != null) {
                             try {
-                                parent.removeView(instance.surfaceView);
+                                parent.removeView(instance.textureView);
                             } catch (Exception e) {
                                 // Ignore
                             }
                         }
-                        instance.surfaceView = null;
+                        instance.textureView = null;
                     }
-                } else if (instance.surfaceView != null) {
-                    // Video player - remove SurfaceView but keep reference for reuse
-                    instance.player.clearVideoSurfaceView(instance.surfaceView);
+                } else if (instance.textureView != null) {
+                    // Video player - remove TextureView but keep reference for reuse
+                    instance.player.clearVideoTextureView();
                     // Remove from view hierarchy
-                    ViewGroup parent = (ViewGroup) instance.surfaceView.getParent();
+                    ViewGroup parent = (ViewGroup) instance.textureView.getParent();
                     if (parent != null) {
                         try {
-                            parent.removeView(instance.surfaceView);
+                            parent.removeView(instance.textureView);
                         } catch (Exception e) {
                             // Ignore
                         }
                     }
                     // Don't set to null - we'll reuse it when video plays again
-                    // instance.surfaceView = null;
+                    // instance.textureView = null;
                 }
                 call.resolve();
             } catch (Exception e) {
@@ -523,62 +545,67 @@ public class ExoPlayerSignagePlugin extends Plugin {
         
         activity.runOnUiThread(() -> {
             try {
-                // Pause playback to ensure SurfaceView doesn't block UI
+                // Pause playback to ensure TextureView doesn't block UI
                 if (instance.player != null) {
                     instance.player.pause();
                 }
                 
-                // CRITICAL: Audio players should NEVER have a SurfaceView - ensure it's null
+                // CRITICAL: Audio players should NEVER have a TextureView - ensure it's null
                 if ("audio".equals(instance.type)) {
-                    if (instance.surfaceView != null) {
+                    if (instance.textureView != null) {
                         try {
-                            instance.player.clearVideoSurfaceView(instance.surfaceView);
+                            instance.player.clearVideoTextureView();
                         } catch (Exception e) {
                             // Ignore
                         }
-                        ViewGroup parent = (ViewGroup) instance.surfaceView.getParent();
+                        ViewGroup parent = (ViewGroup) instance.textureView.getParent();
                         if (parent != null) {
                             try {
-                                parent.removeView(instance.surfaceView);
+                                parent.removeView(instance.textureView);
                             } catch (Exception e) {
                                 // Ignore
                             }
                         }
-                        instance.surfaceView = null;
+                        instance.textureView = null;
                     }
-                    // Also ensure no other SurfaceViews are blocking (cleanup any orphaned ones)
-                    removeAllSurfaceViewsFromRoot();
+                    // Also ensure no other TextureViews are blocking (cleanup any orphaned ones)
+                    removeAllTextureViewsFromRoot();
                     call.resolve();
                     return;
                 }
                 
-                // Remove SurfaceView from layout to ensure it doesn't block modals/images (video only)
-                if (instance.surfaceView != null) {
-                    // Clear video surface first (before removing from view)
+                // Remove TextureView from layout to ensure it doesn't block modals/images (video only)
+                if (instance.textureView != null) {
+                    // Clear video texture first (before removing from view)
                     if (instance.player != null) {
                         try {
-                            instance.player.clearVideoSurfaceView(instance.surfaceView);
+                            instance.player.clearVideoTextureView();
                         } catch (Exception e) {
-                            // Ignore errors when clearing surface
+                            // Ignore errors when clearing texture
                         }
                     }
                     // Set visibility to GONE first to stop rendering
-                    instance.surfaceView.setVisibility(android.view.View.GONE);
+                    instance.textureView.setVisibility(android.view.View.GONE);
                     // Remove from view hierarchy
-                    ViewGroup parent = (ViewGroup) instance.surfaceView.getParent();
+                    ViewGroup parent = (ViewGroup) instance.textureView.getParent();
                     if (parent != null) {
                         try {
-                            parent.removeView(instance.surfaceView);
+                            parent.removeView(instance.textureView);
                         } catch (Exception e) {
                             // Ignore errors when removing view
                         }
                     }
-                    // Don't set to null - we'll reuse it when video plays again
-                    // instance.surfaceView = null;
+                    // CRITICAL: Set to null to ensure it's completely removed
+                    // We'll recreate it when needed in play() or show()
+                    instance.textureView = null;
                 }
+                
+                // Also remove any orphaned TextureViews from the root view
+                removeAllTextureViewsFromRoot();
+                
                 call.resolve();
             } catch (Exception e) {
-                call.reject("Error hiding SurfaceView: " + e.getMessage(), e);
+                call.reject("Error hiding TextureView: " + e.getMessage(), e);
             }
         });
     }
@@ -605,64 +632,90 @@ public class ExoPlayerSignagePlugin extends Plugin {
         
         activity.runOnUiThread(() -> {
             try {
-                // CRITICAL: Audio players should NEVER have a SurfaceView
+                // CRITICAL: Audio players should NEVER have a TextureView
                 if ("audio".equals(instance.type)) {
-                    // Ensure no SurfaceView exists for audio
-                    if (instance.surfaceView != null) {
+                    // Ensure no TextureView exists for audio
+                    if (instance.textureView != null) {
                         try {
-                            instance.player.clearVideoSurfaceView(instance.surfaceView);
+                            instance.player.clearVideoTextureView();
                         } catch (Exception e) {
                             // Ignore
                         }
-                        ViewGroup parent = (ViewGroup) instance.surfaceView.getParent();
+                        ViewGroup parent = (ViewGroup) instance.textureView.getParent();
                         if (parent != null) {
                             try {
-                                parent.removeView(instance.surfaceView);
+                                parent.removeView(instance.textureView);
                             } catch (Exception e) {
                                 // Ignore
                             }
                         }
-                        instance.surfaceView = null;
+                        instance.textureView = null;
                     }
                     call.resolve();
                     return;
                 }
                 
-                // Only show SurfaceView for video players
+                // Only show TextureView for video players
+                // CRITICAL: Only create/show TextureView if we're actually showing a video
+                // Don't create it if we're showing an image or modal
                 if ("video".equals(instance.type) && instance.player != null) {
-                    // Recreate SurfaceView if it was removed
-                    if (instance.surfaceView == null) {
-                        instance.surfaceView = new SurfaceView(getContext());
-                        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
-                            FrameLayout.LayoutParams.MATCH_PARENT,
-                            FrameLayout.LayoutParams.MATCH_PARENT
-                        );
-                        instance.surfaceView.setLayoutParams(params);
-                        instance.surfaceView.setZOrderMediaOverlay(true);
-                        instance.surfaceView.setZOrderOnTop(false);
-                        
-                        // Add SurfaceView to root view
-                        ViewGroup rootView = (ViewGroup) activity.findViewById(android.R.id.content);
-                        if (rootView != null) {
-                            rootView.addView(instance.surfaceView);
-                        }
-                    } else {
-                        // SurfaceView exists but might not be in layout - re-add if needed
-                        ViewGroup parent = (ViewGroup) instance.surfaceView.getParent();
-                        if (parent == null) {
+                    // Check if player is actually playing a video (not just initialized)
+                    int playbackState = instance.player.getPlaybackState();
+                    boolean isPlaying = instance.player.isPlaying();
+                    
+                    // Only create/show TextureView if player is actually playing
+                    if (playbackState != Player.STATE_IDLE && isPlaying) {
+                        // Recreate TextureView if it was removed
+                        if (instance.textureView == null) {
+                            instance.textureView = new TextureView(getContext());
+                            FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                                FrameLayout.LayoutParams.MATCH_PARENT,
+                                FrameLayout.LayoutParams.MATCH_PARENT
+                            );
+                            instance.textureView.setLayoutParams(params);
+                            // TextureView doesn't need z-order settings - it respects normal view hierarchy
+                            
+                            // Add TextureView to root view
                             ViewGroup rootView = (ViewGroup) activity.findViewById(android.R.id.content);
                             if (rootView != null) {
-                                rootView.addView(instance.surfaceView);
+                                rootView.addView(instance.textureView);
+                            }
+                        } else {
+                            // TextureView exists but might not be in layout - re-add if needed
+                            ViewGroup parent = (ViewGroup) instance.textureView.getParent();
+                            if (parent == null) {
+                                ViewGroup rootView = (ViewGroup) activity.findViewById(android.R.id.content);
+                                if (rootView != null) {
+                                    rootView.addView(instance.textureView);
+                                }
+                            }
+                        }
+                        
+                        instance.textureView.setVisibility(android.view.View.VISIBLE);
+                        instance.player.setVideoTextureView(instance.textureView);
+                    } else {
+                        // Player is not playing - ensure TextureView is removed
+                        if (instance.textureView != null) {
+                            try {
+                                instance.player.clearVideoTextureView();
+                            } catch (Exception e) {
+                                // Ignore
+                            }
+                            instance.textureView.setVisibility(android.view.View.GONE);
+                            ViewGroup parent = (ViewGroup) instance.textureView.getParent();
+                            if (parent != null) {
+                                try {
+                                    parent.removeView(instance.textureView);
+                                } catch (Exception e) {
+                                    // Ignore
+                                }
                             }
                         }
                     }
-                    
-                    instance.surfaceView.setVisibility(android.view.View.VISIBLE);
-                    instance.player.setVideoSurfaceView(instance.surfaceView);
                 }
                 call.resolve();
             } catch (Exception e) {
-                call.reject("Error showing SurfaceView: " + e.getMessage(), e);
+                call.reject("Error showing TextureView: " + e.getMessage(), e);
             }
         });
     }
@@ -685,15 +738,15 @@ public class ExoPlayerSignagePlugin extends Plugin {
         if (activity != null) {
             activity.runOnUiThread(() -> {
                 if (instance.player != null) {
-                    if (instance.surfaceView != null) {
-                        instance.player.clearVideoSurfaceView(instance.surfaceView);
+                    if (instance.textureView != null) {
+                        instance.player.clearVideoTextureView();
                     }
                     instance.player.release();
                 }
-                if (instance.surfaceView != null) {
-                    ViewGroup parent = (ViewGroup) instance.surfaceView.getParent();
+                if (instance.textureView != null) {
+                    ViewGroup parent = (ViewGroup) instance.textureView.getParent();
                     if (parent != null) {
-                        parent.removeView(instance.surfaceView);
+                        parent.removeView(instance.textureView);
                     }
                 }
                 players.remove(playerId);
@@ -701,8 +754,8 @@ public class ExoPlayerSignagePlugin extends Plugin {
             });
         } else {
             if (instance.player != null) {
-                if (instance.surfaceView != null) {
-                    instance.player.clearVideoSurfaceView(instance.surfaceView);
+                if (instance.textureView != null) {
+                    instance.player.clearVideoTextureView();
                 }
                 instance.player.release();
             }
@@ -719,15 +772,15 @@ public class ExoPlayerSignagePlugin extends Plugin {
                 // Release all players
                 for (PlayerInstance instance : players.values()) {
                     if (instance.player != null) {
-                        if (instance.surfaceView != null) {
-                            instance.player.clearVideoSurfaceView(instance.surfaceView);
+                        if (instance.textureView != null) {
+                            instance.player.clearVideoTextureView();
                         }
                         instance.player.release();
                     }
-                    if (instance.surfaceView != null) {
-                        ViewGroup parent = (ViewGroup) instance.surfaceView.getParent();
+                    if (instance.textureView != null) {
+                        ViewGroup parent = (ViewGroup) instance.textureView.getParent();
                         if (parent != null) {
-                            parent.removeView(instance.surfaceView);
+                            parent.removeView(instance.textureView);
                         }
                     }
                 }
@@ -741,8 +794,8 @@ public class ExoPlayerSignagePlugin extends Plugin {
         } else {
             for (PlayerInstance instance : players.values()) {
                 if (instance.player != null) {
-                    if (instance.surfaceView != null) {
-                        instance.player.clearVideoSurfaceView(instance.surfaceView);
+                    if (instance.textureView != null) {
+                        instance.player.clearVideoTextureView();
                     }
                     instance.player.release();
                 }
