@@ -399,12 +399,24 @@ public class ExoPlayerSignagePlugin extends Plugin {
                 }
                 // Remove SurfaceView from layout to ensure it doesn't block modals/images
                 if (instance.surfaceView != null) {
-                    // Clear video surface first
-                    instance.player.clearVideoSurfaceView(instance.surfaceView);
+                    // Clear video surface first (before removing from view)
+                    if (instance.player != null) {
+                        try {
+                            instance.player.clearVideoSurfaceView(instance.surfaceView);
+                        } catch (Exception e) {
+                            // Ignore errors when clearing surface
+                        }
+                    }
+                    // Set visibility to GONE first to stop rendering
+                    instance.surfaceView.setVisibility(android.view.View.GONE);
                     // Remove from view hierarchy
                     ViewGroup parent = (ViewGroup) instance.surfaceView.getParent();
                     if (parent != null) {
-                        parent.removeView(instance.surfaceView);
+                        try {
+                            parent.removeView(instance.surfaceView);
+                        } catch (Exception e) {
+                            // Ignore errors when removing view
+                        }
                     }
                     // Don't set to null - we'll reuse it when video plays again
                     // instance.surfaceView = null;
