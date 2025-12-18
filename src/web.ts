@@ -3,7 +3,7 @@ import { WebPlugin } from '@capacitor/core';
 import type { ExoPlayerSignagePlugin } from './definitions';
 
 export class ExoPlayerSignageWeb extends WebPlugin implements ExoPlayerSignagePlugin {
-  async createPlayer(_options: { type: 'video' | 'audio' }): Promise<{ playerId: string }> {
+  async createPlayer(_options: { type: 'video' | 'audio'; volume?: number }): Promise<{ playerId: string }> {
     console.warn('ExoPlayerSignage: createPlayer() no está disponible en web. Solo funciona en Android.');
     throw this.unimplemented('createPlayer() no está implementado en web. Usa Android.');
   }

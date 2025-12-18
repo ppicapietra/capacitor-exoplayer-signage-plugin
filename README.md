@@ -46,12 +46,12 @@ npx cap sync
 ### createPlayer(...)
 
 ```typescript
-createPlayer(options: { type: 'video' | 'audio'; }) => Promise<{ playerId: string; }>
+createPlayer(options: { type: 'video' | 'audio'; volume?: number; }) => Promise<{ playerId: string; }>
 ```
 
-| Param         | Type                                       |
-| ------------- | ------------------------------------------ |
-| **`options`** | <code>{ type: 'video' \| 'audio'; }</code> |
+| Param         | Type                                                        |
+| ------------- | ----------------------------------------------------------- |
+| **`options`** | <code>{ type: 'video' \| 'audio'; volume?: number; }</code> |
 
 **Returns:** <code>Promise&lt;{ playerId: string; }&gt;</code>
 

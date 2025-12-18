@@ -85,6 +85,16 @@ public class ExoPlayerSignagePlugin extends Plugin {
             return;
         }
         
+        // Get initial volume (optional, defaults based on type)
+        Double volumeValue = call.getDouble("volume", null);
+        float initialVolume;
+        if (volumeValue != null) {
+            initialVolume = volumeValue.floatValue();
+        } else {
+            // Default volumes: 0.0 for video, 1.0 for audio
+            initialVolume = "audio".equals(type) ? 1.0f : 0.0f;
+        }
+        
         android.app.Activity activity = getBridge().getActivity();
         if (activity == null) {
             call.reject("Activity not available");
@@ -123,22 +133,20 @@ public class ExoPlayerSignagePlugin extends Plugin {
                     // Associate SurfaceView with player
                     player.setVideoSurfaceView(surfaceView);
                     
-                    // Configure for video (muted by default)
+                    // Configure AudioAttributes for video
                     AudioAttributes audioAttributes = new AudioAttributes.Builder()
                             .setUsage(C.USAGE_MEDIA)
                             .setContentType(C.CONTENT_TYPE_MOVIE)
                             .build();
                     player.setAudioAttributes(audioAttributes, false);
-                    player.setVolume(0.0f);
                 } else {
                     // Audio player - no SurfaceView needed
-                    // Configure for audio (full volume)
+                    // Configure AudioAttributes for audio
                     AudioAttributes audioAttributes = new AudioAttributes.Builder()
                             .setUsage(C.USAGE_MEDIA)
                             .setContentType(C.CONTENT_TYPE_MUSIC)
                             .build();
                     player.setAudioAttributes(audioAttributes, false);
-                    player.setVolume(1.0f);
                     
                     // Add listener for audio playback ended
                     player.addListener(new Player.Listener() {
@@ -152,6 +160,9 @@ public class ExoPlayerSignagePlugin extends Plugin {
                         }
                     });
                 }
+                
+                // Set initial volume (configurable from tv_app)
+                player.setVolume(initialVolume);
                 
                 player.setPlayWhenReady(true);
                 player.setRepeatMode(ExoPlayer.REPEAT_MODE_OFF);
@@ -221,7 +232,7 @@ public class ExoPlayerSignagePlugin extends Plugin {
                 player.setMediaItem(MediaItem.fromUri(Uri.parse(url)));
                 player.prepare();
                 
-                // Start playback
+                // Start playback (volume is already set when player was created or via setVolume)
                 player.play();
                 
                 call.resolve();
