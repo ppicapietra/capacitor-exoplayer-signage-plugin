@@ -237,16 +237,35 @@ public class ExoPlayerSignagePlugin extends Plugin {
                     instance.surfaceView.setVisibility(visible ? android.view.View.VISIBLE : android.view.View.GONE);
                     player.setVideoSurfaceView(instance.surfaceView);
                 } else {
-                    // Audio playback - ensure SurfaceView is removed
+                    // Audio playback - ensure NO SurfaceView exists or is visible
+                    // Audio players should NEVER have a SurfaceView
                     if (instance.surfaceView != null) {
-                        // Remove SurfaceView from layout for audio playback
+                        // Clear video surface first
+                        try {
+                            player.clearVideoSurfaceView(instance.surfaceView);
+                        } catch (Exception e) {
+                            // Ignore errors
+                        }
+                        
+                        // Remove from layout if it exists
                         ViewGroup parent = (ViewGroup) instance.surfaceView.getParent();
                         if (parent != null) {
-                            parent.removeView(instance.surfaceView);
+                            try {
+                                parent.removeView(instance.surfaceView);
+                            } catch (Exception e) {
+                                // Ignore errors
+                            }
                         }
-                        player.clearVideoSurfaceView(instance.surfaceView);
-                        // Keep reference but removed from layout
+                        
+                        // Set visibility to GONE as additional safety
+                        instance.surfaceView.setVisibility(android.view.View.GONE);
+                        
+                        // IMPORTANT: Set to null to ensure it's never reused for audio
+                        instance.surfaceView = null;
                     }
+                    
+                    // Ensure no video surface is set on the player
+                    player.clearVideoSurfaceView(null);
                 }
                 
                 // Stop any current playback before setting new media item
@@ -368,13 +387,36 @@ public class ExoPlayerSignagePlugin extends Plugin {
         activity.runOnUiThread(() -> {
             try {
                 instance.player.stop();
-                // Remove SurfaceView when stopped (for video players)
-                if (instance.surfaceView != null) {
+                // Remove SurfaceView when stopped (for video players only)
+                // CRITICAL: Audio players should NEVER have a SurfaceView
+                if ("audio".equals(instance.type)) {
+                    if (instance.surfaceView != null) {
+                        try {
+                            instance.player.clearVideoSurfaceView(instance.surfaceView);
+                        } catch (Exception e) {
+                            // Ignore
+                        }
+                        ViewGroup parent = (ViewGroup) instance.surfaceView.getParent();
+                        if (parent != null) {
+                            try {
+                                parent.removeView(instance.surfaceView);
+                            } catch (Exception e) {
+                                // Ignore
+                            }
+                        }
+                        instance.surfaceView = null;
+                    }
+                } else if (instance.surfaceView != null) {
+                    // Video player - remove SurfaceView but keep reference for reuse
                     instance.player.clearVideoSurfaceView(instance.surfaceView);
                     // Remove from view hierarchy
                     ViewGroup parent = (ViewGroup) instance.surfaceView.getParent();
                     if (parent != null) {
-                        parent.removeView(instance.surfaceView);
+                        try {
+                            parent.removeView(instance.surfaceView);
+                        } catch (Exception e) {
+                            // Ignore
+                        }
                     }
                     // Don't set to null - we'll reuse it when video plays again
                     // instance.surfaceView = null;
@@ -445,7 +487,30 @@ public class ExoPlayerSignagePlugin extends Plugin {
                 if (instance.player != null) {
                     instance.player.pause();
                 }
-                // Remove SurfaceView from layout to ensure it doesn't block modals/images
+                
+                // CRITICAL: Audio players should NEVER have a SurfaceView - ensure it's null
+                if ("audio".equals(instance.type)) {
+                    if (instance.surfaceView != null) {
+                        try {
+                            instance.player.clearVideoSurfaceView(instance.surfaceView);
+                        } catch (Exception e) {
+                            // Ignore
+                        }
+                        ViewGroup parent = (ViewGroup) instance.surfaceView.getParent();
+                        if (parent != null) {
+                            try {
+                                parent.removeView(instance.surfaceView);
+                            } catch (Exception e) {
+                                // Ignore
+                            }
+                        }
+                        instance.surfaceView = null;
+                    }
+                    call.resolve();
+                    return;
+                }
+                
+                // Remove SurfaceView from layout to ensure it doesn't block modals/images (video only)
                 if (instance.surfaceView != null) {
                     // Clear video surface first (before removing from view)
                     if (instance.player != null) {
@@ -498,6 +563,29 @@ public class ExoPlayerSignagePlugin extends Plugin {
         
         activity.runOnUiThread(() -> {
             try {
+                // CRITICAL: Audio players should NEVER have a SurfaceView
+                if ("audio".equals(instance.type)) {
+                    // Ensure no SurfaceView exists for audio
+                    if (instance.surfaceView != null) {
+                        try {
+                            instance.player.clearVideoSurfaceView(instance.surfaceView);
+                        } catch (Exception e) {
+                            // Ignore
+                        }
+                        ViewGroup parent = (ViewGroup) instance.surfaceView.getParent();
+                        if (parent != null) {
+                            try {
+                                parent.removeView(instance.surfaceView);
+                            } catch (Exception e) {
+                                // Ignore
+                            }
+                        }
+                        instance.surfaceView = null;
+                    }
+                    call.resolve();
+                    return;
+                }
+                
                 // Only show SurfaceView for video players
                 if ("video".equals(instance.type) && instance.player != null) {
                     // Recreate SurfaceView if it was removed
