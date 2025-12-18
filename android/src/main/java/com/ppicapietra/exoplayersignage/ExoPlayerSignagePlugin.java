@@ -55,6 +55,46 @@ public class ExoPlayerSignagePlugin extends Plugin {
             this.id = id;
         }
     }
+    
+    // Helper method to remove ALL SurfaceViews from the view hierarchy (for debugging)
+    private void removeAllSurfaceViewsFromRoot() {
+        android.app.Activity activity = getBridge().getActivity();
+        if (activity == null) return;
+        
+        activity.runOnUiThread(() -> {
+            try {
+                ViewGroup rootView = (ViewGroup) activity.findViewById(android.R.id.content);
+                if (rootView != null) {
+                    // Find and remove all SurfaceViews
+                    java.util.ArrayList<SurfaceView> surfaceViews = new java.util.ArrayList<>();
+                    findSurfaceViews(rootView, surfaceViews);
+                    for (SurfaceView sv : surfaceViews) {
+                        try {
+                            ViewGroup parent = (ViewGroup) sv.getParent();
+                            if (parent != null) {
+                                parent.removeView(sv);
+                            }
+                        } catch (Exception e) {
+                            // Ignore
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                // Ignore
+            }
+        });
+    }
+    
+    private void findSurfaceViews(ViewGroup parent, java.util.ArrayList<SurfaceView> result) {
+        for (int i = 0; i < parent.getChildCount(); i++) {
+            android.view.View child = parent.getChildAt(i);
+            if (child instanceof SurfaceView) {
+                result.add((SurfaceView) child);
+            } else if (child instanceof ViewGroup) {
+                findSurfaceViews((ViewGroup) child, result);
+            }
+        }
+    }
 
     private long getSafeCacheSize() {
         File cacheDir = getContext().getCacheDir();
@@ -506,6 +546,8 @@ public class ExoPlayerSignagePlugin extends Plugin {
                         }
                         instance.surfaceView = null;
                     }
+                    // Also ensure no other SurfaceViews are blocking (cleanup any orphaned ones)
+                    removeAllSurfaceViewsFromRoot();
                     call.resolve();
                     return;
                 }
