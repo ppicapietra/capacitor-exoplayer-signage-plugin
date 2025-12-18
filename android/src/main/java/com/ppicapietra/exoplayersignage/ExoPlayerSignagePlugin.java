@@ -245,6 +245,12 @@ public class ExoPlayerSignagePlugin extends Plugin {
             try {
                 ExoPlayer player = instance.player;
                 
+                // Stop any current playback before setting new media item
+                // This must be done BEFORE creating/associating TextureView to avoid conflicts
+                if (player.getPlaybackState() != Player.STATE_IDLE) {
+                    player.stop();
+                }
+                
                 if ("video".equals(instance.type)) {
                     // Video playback - create TextureView ONLY if visible is true
                     // TextureView respects z-order, allowing HTML elements (modal, images) to appear on top
@@ -294,9 +300,9 @@ public class ExoPlayerSignagePlugin extends Plugin {
                             }
                         }
                         
-                        // Show TextureView and associate with player
+                        // Show TextureView
                         instance.textureView.setVisibility(android.view.View.VISIBLE);
-                        player.setVideoTextureView(instance.textureView);
+                        // Note: We'll associate TextureView with player AFTER MediaItem is set (see below)
                     }
                 } else {
                     // Audio playback - ensure NO TextureView exists or is visible
@@ -328,11 +334,6 @@ public class ExoPlayerSignagePlugin extends Plugin {
                     
                     // Ensure no video texture is set on the player
                     // Note: clearVideoTextureView requires a TextureView parameter, so we only clear if one exists
-                }
-                
-                // Stop any current playback before setting new media item
-                if (player.getPlaybackState() != Player.STATE_IDLE) {
-                    player.stop();
                 }
                 
                 // Get auth token from call if provided
@@ -375,6 +376,12 @@ public class ExoPlayerSignagePlugin extends Plugin {
                 } else {
                     // Use default cache factory (no auth)
                     player.setMediaItem(mediaItem);
+                }
+                
+                // For video players, associate TextureView AFTER MediaItem is set but BEFORE prepare()
+                // This ensures the TextureView is ready when the player prepares
+                if ("video".equals(instance.type) && visible && instance.textureView != null) {
+                    player.setVideoTextureView(instance.textureView);
                 }
                 
                 player.prepare();
