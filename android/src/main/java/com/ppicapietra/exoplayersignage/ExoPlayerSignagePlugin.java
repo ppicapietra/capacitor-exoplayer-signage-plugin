@@ -45,6 +45,9 @@ public class ExoPlayerSignagePlugin extends Plugin {
     // This ensures videos stay below the WebView (which contains the modal HTML)
     private SurfaceView videoSurfaceView;
     
+    // Pending player to associate with SurfaceView when SurfaceHolder is ready
+    private ExoPlayer pendingPlayer;
+    
     // Helper class to manage a single player instance
     private static class PlayerInstance {
         ExoPlayer player;
@@ -100,6 +103,32 @@ public class ExoPlayerSignagePlugin extends Plugin {
         
         // Set background color to black (will show if video doesn't render)
         videoSurfaceView.setBackgroundColor(android.graphics.Color.BLACK);
+        
+        // Set up SurfaceHolder callback to ensure SurfaceView is ready before associating with player
+        videoSurfaceView.getHolder().addCallback(new android.view.SurfaceHolder.Callback() {
+            @Override
+            public void surfaceCreated(android.view.SurfaceHolder holder) {
+                android.util.Log.d("ExoPlayerSignage", "✅ SurfaceHolder created - SurfaceView is ready");
+                // If there's a pending player, associate it now
+                if (pendingPlayer != null) {
+                    android.util.Log.d("ExoPlayerSignage", "🎬 Associating pending player with SurfaceView");
+                    pendingPlayer.setVideoSurfaceView(videoSurfaceView);
+                    pendingPlayer = null; // Clear pending player
+                }
+            }
+            
+            @Override
+            public void surfaceChanged(android.view.SurfaceHolder holder, int format, int width, int height) {
+                android.util.Log.d("ExoPlayerSignage", "SurfaceHolder changed: " + width + "x" + height);
+            }
+            
+            @Override
+            public void surfaceDestroyed(android.view.SurfaceHolder holder) {
+                android.util.Log.d("ExoPlayerSignage", "⚠️ SurfaceHolder destroyed");
+                // Clear any pending player association
+                pendingPlayer = null;
+            }
+        });
         
         // Set z-order to ensure it's below WebView (which has z-order 10000)
         // SurfaceView should be below WebView but above background
@@ -394,16 +423,27 @@ public class ExoPlayerSignagePlugin extends Plugin {
                 }
                 
                 // For video players, associate SurfaceView AFTER MediaItem is set but BEFORE prepare()
-                // This ensures the SurfaceView is ready when the player prepares
+                // Wait for SurfaceHolder to be ready before associating
                 if ("video".equals(instance.type) && instance.surfaceView != null) {
-                    android.util.Log.d("ExoPlayerSignage", "🎬 Associating SurfaceView with player");
+                    android.util.Log.d("ExoPlayerSignage", "🎬 Preparing to associate SurfaceView with player");
                     android.util.Log.d("ExoPlayerSignage", "SurfaceView parent: " + 
                         (instance.surfaceView.getParent() != null ? instance.surfaceView.getParent().getClass().getName() : "null"));
                     android.util.Log.d("ExoPlayerSignage", "SurfaceView visibility BEFORE: " + 
                         (instance.surfaceView.getVisibility() == android.view.View.VISIBLE ? "VISIBLE" : 
                         instance.surfaceView.getVisibility() == android.view.View.INVISIBLE ? "INVISIBLE" : "GONE"));
                     
-                    player.setVideoSurfaceView(instance.surfaceView);
+                    // Check if SurfaceHolder is already ready
+                    android.view.SurfaceHolder holder = instance.surfaceView.getHolder();
+                    if (holder.getSurface() != null && holder.getSurface().isValid()) {
+                        // SurfaceHolder is ready - associate immediately
+                        android.util.Log.d("ExoPlayerSignage", "✅ SurfaceHolder is ready - associating immediately");
+                        player.setVideoSurfaceView(instance.surfaceView);
+                        pendingPlayer = null; // Clear any pending player
+                    } else {
+                        // SurfaceHolder not ready yet - store player for callback
+                        android.util.Log.d("ExoPlayerSignage", "⏳ SurfaceHolder not ready - will associate when surfaceCreated() is called");
+                        pendingPlayer = player;
+                    }
                     
                     // Make SurfaceView visible when playing video
                     instance.surfaceView.setVisibility(android.view.View.VISIBLE);
@@ -684,8 +724,18 @@ public class ExoPlayerSignagePlugin extends Plugin {
                         instance.surfaceView = getOrCreateVideoSurfaceView();
                     }
                     
-                    // Associate SurfaceView with player
-                    instance.player.setVideoSurfaceView(instance.surfaceView);
+                    // Associate SurfaceView with player (wait for SurfaceHolder if needed)
+                    android.view.SurfaceHolder holder = instance.surfaceView.getHolder();
+                    if (holder.getSurface() != null && holder.getSurface().isValid()) {
+                        // SurfaceHolder is ready - associate immediately
+                        android.util.Log.d("ExoPlayerSignage", "✅ SurfaceHolder ready in show() - associating immediately");
+                        instance.player.setVideoSurfaceView(instance.surfaceView);
+                        pendingPlayer = null; // Clear any pending player
+                    } else {
+                        // SurfaceHolder not ready yet - store player for callback
+                        android.util.Log.d("ExoPlayerSignage", "⏳ SurfaceHolder not ready in show() - will associate when surfaceCreated() is called");
+                        pendingPlayer = instance.player;
+                    }
                     
                     // Check player state
                     int playbackState = instance.player.getPlaybackState();
@@ -727,6 +777,10 @@ public class ExoPlayerSignagePlugin extends Plugin {
         if (activity != null) {
             activity.runOnUiThread(() -> {
                 if (instance.player != null) {
+                    // Clear pending player if this is the one waiting
+                    if (pendingPlayer == instance.player) {
+                        pendingPlayer = null;
+                    }
                     if (instance.surfaceView != null && "video".equals(instance.type)) {
                         instance.player.clearVideoSurface();
                     }
@@ -739,6 +793,10 @@ public class ExoPlayerSignagePlugin extends Plugin {
             });
         } else {
             if (instance.player != null) {
+                // Clear pending player if this is the one waiting
+                if (pendingPlayer == instance.player) {
+                    pendingPlayer = null;
+                }
                 if (instance.surfaceView != null && "video".equals(instance.type)) {
                     instance.player.clearVideoSurface();
                 }
@@ -757,6 +815,10 @@ public class ExoPlayerSignagePlugin extends Plugin {
                 // Release all players
                 for (PlayerInstance instance : players.values()) {
                     if (instance.player != null) {
+                        // Clear pending player if this is the one waiting
+                        if (pendingPlayer == instance.player) {
+                            pendingPlayer = null;
+                        }
                         if (instance.surfaceView != null && "video".equals(instance.type)) {
                             instance.player.clearVideoSurface();
                         }
@@ -764,6 +826,9 @@ public class ExoPlayerSignagePlugin extends Plugin {
                     }
                 }
                 players.clear();
+                
+                // Clear pending player reference
+                pendingPlayer = null;
                 
                 // Don't remove SurfaceView - it's shared and will be cleaned up by Android
                 // Visibility is controlled by the app
