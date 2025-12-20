@@ -539,12 +539,19 @@ public class ExoPlayerSignagePlugin extends Plugin {
                     }
                 } else if (instance.textureView != null) {
                     // Video player - hide TextureView but keep it in container for reuse
-                    instance.player.clearVideoTextureView(instance.textureView);
+                    // CRITICAL: DO NOT call clearVideoTextureView() here - it desassociates the TextureView
+                    // from the player, making it impossible to restore playback later
+                    // Instead, just pause and hide the TextureView
+                    instance.player.pause();
                     // Hide TextureView using INVISIBLE (keeps it in layout, maintains z-order)
                     instance.textureView.setVisibility(android.view.View.INVISIBLE);
                     
-                    // DO NOT hide container - keep it visible to maintain z-order
-                    // Container visibility should be managed separately, not based on TextureView visibility
+                    // CRITICAL: Ensure container remains VISIBLE even when TextureView is INVISIBLE
+                    // This maintains the z-order and allows quick restoration
+                    FrameLayout container = getOrCreateVideoContainer();
+                    if (container != null) {
+                        container.setVisibility(android.view.View.VISIBLE);
+                    }
                     
                     // Don't set to null - we'll reuse it when video plays again
                     // Don't remove from parent - keep it in container to maintain z-order
@@ -637,21 +644,27 @@ public class ExoPlayerSignagePlugin extends Plugin {
                 // Hide TextureView without removing it from layout (video only)
                 // This allows it to be shown again later without recreation
                 if (instance.textureView != null) {
-                    // Pause and clear video texture to stop rendering
+                    // Pause playback but DO NOT clear video texture
+                    // CRITICAL: clearVideoTextureView() desassociates the TextureView from the player,
+                    // making it impossible to restore playback later without recreating the TextureView
                     if (instance.player != null) {
                         try {
                             instance.player.pause();
-                            instance.player.clearVideoTextureView(instance.textureView);
+                            // DO NOT call clearVideoTextureView() here - keep TextureView associated with player
                         } catch (Exception e) {
-                            // Ignore errors when clearing texture
+                            // Ignore errors
                         }
                     }
                     // Set visibility to INVISIBLE to hide it (but keep it in the container)
                     // Using INVISIBLE instead of GONE maintains layout space and z-order
                     instance.textureView.setVisibility(android.view.View.INVISIBLE);
                     
-                    // DO NOT hide container - keep it visible to maintain z-order
-                    // Container visibility should be managed separately, not based on TextureView visibility
+                    // CRITICAL: Ensure container remains VISIBLE even when TextureView is INVISIBLE
+                    // This maintains the z-order and allows quick restoration
+                    FrameLayout container = getOrCreateVideoContainer();
+                    if (container != null) {
+                        container.setVisibility(android.view.View.VISIBLE);
+                    }
                     
                     // DO NOT remove TextureView from parent
                     // DO NOT set instance.textureView = null
