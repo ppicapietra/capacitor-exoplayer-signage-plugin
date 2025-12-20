@@ -318,21 +318,29 @@ public class ExoPlayerSignagePlugin extends Plugin {
                     if (!visible) {
                         // Don't create or show TextureView if not visible
                         if (instance.textureView != null) {
-                            // Remove TextureView if it exists
+                            // Hide TextureView using INVISIBLE (keep it in container)
                             try {
                                 player.clearVideoTextureView(instance.textureView);
                             } catch (Exception e) {
                                 // Ignore
                             }
-                            instance.textureView.setVisibility(android.view.View.GONE);
-                            ViewGroup parent = (ViewGroup) instance.textureView.getParent();
-                            if (parent != null) {
-                                try {
-                                    parent.removeView(instance.textureView);
-                                } catch (Exception e) {
-                                    // Ignore
+                            // Use INVISIBLE instead of removing from parent
+                            instance.textureView.setVisibility(android.view.View.INVISIBLE);
+                            
+                            // Hide container if all TextureViews are invisible
+                            if (videoContainer != null) {
+                                boolean hasVisibleChildren = false;
+                                for (int i = 0; i < videoContainer.getChildCount(); i++) {
+                                    if (videoContainer.getChildAt(i).getVisibility() == android.view.View.VISIBLE) {
+                                        hasVisibleChildren = true;
+                                        break;
+                                    }
+                                }
+                                if (!hasVisibleChildren) {
+                                    videoContainer.setVisibility(android.view.View.GONE);
                                 }
                             }
+                            // DO NOT remove from parent - keep it in container
                         }
                     } else {
                         // visible is true - create TextureView if needed
@@ -364,6 +372,8 @@ public class ExoPlayerSignagePlugin extends Plugin {
                                 }
                             } else if (parent != container) {
                                 // TextureView is in wrong parent (e.g., root view) - move to container
+                                // This is a migration case - hide first, then move
+                                instance.textureView.setVisibility(android.view.View.INVISIBLE);
                                 try {
                                     parent.removeView(instance.textureView);
                                 } catch (Exception e) {
@@ -391,18 +401,9 @@ public class ExoPlayerSignagePlugin extends Plugin {
                             // Ignore errors
                         }
                         
-                        // Remove from layout if it exists
-                        ViewGroup parent = (ViewGroup) instance.textureView.getParent();
-                        if (parent != null) {
-                            try {
-                                parent.removeView(instance.textureView);
-                            } catch (Exception e) {
-                                // Ignore errors
-                            }
-                        }
-                        
-                        // Set visibility to GONE as additional safety
-                        instance.textureView.setVisibility(android.view.View.GONE);
+                        // Hide TextureView using INVISIBLE (keep in layout but hidden)
+                        // Don't remove from parent - use visibility instead
+                        instance.textureView.setVisibility(android.view.View.INVISIBLE);
                         
                         // IMPORTANT: Set to null to ensure it's never reused for audio
                         instance.textureView = null;
@@ -541,34 +542,32 @@ public class ExoPlayerSignagePlugin extends Plugin {
                         } catch (Exception e) {
                             // Ignore
                         }
-                        ViewGroup parent = (ViewGroup) instance.textureView.getParent();
-                        if (parent != null) {
-                            try {
-                                parent.removeView(instance.textureView);
-                            } catch (Exception e) {
-                                // Ignore
-                            }
-                        }
+                        // Hide TextureView using INVISIBLE (keep in layout but hidden)
+                        // Don't remove from parent - use visibility instead
+                        instance.textureView.setVisibility(android.view.View.INVISIBLE);
                         instance.textureView = null;
                     }
                 } else if (instance.textureView != null) {
-                    // Video player - remove TextureView but keep reference for reuse
+                    // Video player - hide TextureView but keep it in container for reuse
                     instance.player.clearVideoTextureView(instance.textureView);
-                    // Remove from view hierarchy (should be in videoContainer)
-                    ViewGroup parent = (ViewGroup) instance.textureView.getParent();
-                    if (parent != null) {
-                        try {
-                            parent.removeView(instance.textureView);
-                            // Hide container if empty
-                            if (parent == videoContainer && videoContainer.getChildCount() == 0) {
-                                videoContainer.setVisibility(android.view.View.GONE);
+                    // Hide TextureView using INVISIBLE (keeps it in layout, maintains z-order)
+                    instance.textureView.setVisibility(android.view.View.INVISIBLE);
+                    
+                    // Hide container if it's empty (all TextureViews are invisible)
+                    if (videoContainer != null) {
+                        boolean hasVisibleChildren = false;
+                        for (int i = 0; i < videoContainer.getChildCount(); i++) {
+                            if (videoContainer.getChildAt(i).getVisibility() == android.view.View.VISIBLE) {
+                                hasVisibleChildren = true;
+                                break;
                             }
-                        } catch (Exception e) {
-                            // Ignore
+                        }
+                        if (!hasVisibleChildren) {
+                            videoContainer.setVisibility(android.view.View.GONE);
                         }
                     }
                     // Don't set to null - we'll reuse it when video plays again
-                    // instance.textureView = null;
+                    // Don't remove from parent - keep it in container to maintain z-order
                 }
                 call.resolve();
             } catch (Exception e) {
@@ -645,14 +644,9 @@ public class ExoPlayerSignagePlugin extends Plugin {
                         } catch (Exception e) {
                             // Ignore
                         }
-                        ViewGroup parent = (ViewGroup) instance.textureView.getParent();
-                        if (parent != null) {
-                            try {
-                                parent.removeView(instance.textureView);
-                            } catch (Exception e) {
-                                // Ignore
-                            }
-                        }
+                        // Hide TextureView using INVISIBLE (keep in layout but hidden)
+                        // Don't remove from parent - use visibility instead
+                        instance.textureView.setVisibility(android.view.View.INVISIBLE);
                         instance.textureView = null;
                     }
                     // Also ensure no other TextureViews are blocking (cleanup any orphaned ones)
@@ -673,13 +667,22 @@ public class ExoPlayerSignagePlugin extends Plugin {
                             // Ignore errors when clearing texture
                         }
                     }
-                    // Set visibility to GONE to hide it (but keep it in the container)
-                    // This ensures it stays in the container with correct z-order
-                    instance.textureView.setVisibility(android.view.View.GONE);
+                    // Set visibility to INVISIBLE to hide it (but keep it in the container)
+                    // Using INVISIBLE instead of GONE maintains layout space and z-order
+                    instance.textureView.setVisibility(android.view.View.INVISIBLE);
                     
-                    // Hide the container itself (but keep TextureView inside for later restoration)
+                    // Hide the container itself if all TextureViews are invisible
                     if (videoContainer != null) {
-                        videoContainer.setVisibility(android.view.View.GONE);
+                        boolean hasVisibleChildren = false;
+                        for (int i = 0; i < videoContainer.getChildCount(); i++) {
+                            if (videoContainer.getChildAt(i).getVisibility() == android.view.View.VISIBLE) {
+                                hasVisibleChildren = true;
+                                break;
+                            }
+                        }
+                        if (!hasVisibleChildren) {
+                            videoContainer.setVisibility(android.view.View.GONE);
+                        }
                     }
                     
                     // DO NOT remove TextureView from parent
@@ -728,14 +731,9 @@ public class ExoPlayerSignagePlugin extends Plugin {
                         } catch (Exception e) {
                             // Ignore
                         }
-                        ViewGroup parent = (ViewGroup) instance.textureView.getParent();
-                        if (parent != null) {
-                            try {
-                                parent.removeView(instance.textureView);
-                            } catch (Exception e) {
-                                // Ignore
-                            }
-                        }
+                        // Hide TextureView using INVISIBLE (keep in layout but hidden)
+                        // Don't remove from parent - use visibility instead
+                        instance.textureView.setVisibility(android.view.View.INVISIBLE);
                         instance.textureView = null;
                     }
                     call.resolve();
@@ -780,6 +778,8 @@ public class ExoPlayerSignagePlugin extends Plugin {
                                 }
                             } else if (parent != container) {
                                 // TextureView is in wrong parent (e.g., root view) - move to container
+                                // This is a migration case - hide first, then move
+                                instance.textureView.setVisibility(android.view.View.INVISIBLE);
                                 try {
                                     parent.removeView(instance.textureView);
                                 } catch (Exception e) {
@@ -806,26 +806,30 @@ public class ExoPlayerSignagePlugin extends Plugin {
                             instance.player.play();
                         }
                     } else {
-                        // Player is not playing - ensure TextureView is removed
+                        // Player is not playing - hide TextureView but keep it in container
                         if (instance.textureView != null) {
                             try {
                                 instance.player.clearVideoTextureView(instance.textureView);
                             } catch (Exception e) {
                                 // Ignore
                             }
-                            instance.textureView.setVisibility(android.view.View.GONE);
-                            ViewGroup parent = (ViewGroup) instance.textureView.getParent();
-                            if (parent != null) {
-                                try {
-                                    parent.removeView(instance.textureView);
-                                    // Hide container if empty
-                                    if (parent == videoContainer && videoContainer.getChildCount() == 0) {
-                                        videoContainer.setVisibility(android.view.View.GONE);
+                            // Hide using INVISIBLE (keeps it in layout, maintains z-order)
+                            instance.textureView.setVisibility(android.view.View.INVISIBLE);
+                            
+                            // Hide container if all TextureViews are invisible
+                            if (videoContainer != null) {
+                                boolean hasVisibleChildren = false;
+                                for (int i = 0; i < videoContainer.getChildCount(); i++) {
+                                    if (videoContainer.getChildAt(i).getVisibility() == android.view.View.VISIBLE) {
+                                        hasVisibleChildren = true;
+                                        break;
                                     }
-                                } catch (Exception e) {
-                                    // Ignore
+                                }
+                                if (!hasVisibleChildren) {
+                                    videoContainer.setVisibility(android.view.View.GONE);
                                 }
                             }
+                            // Don't remove from parent - keep it in container
                         }
                     }
                 }
@@ -860,9 +864,13 @@ public class ExoPlayerSignagePlugin extends Plugin {
                     instance.player.release();
                 }
                 if (instance.textureView != null) {
-                    ViewGroup parent = (ViewGroup) instance.textureView.getParent();
-                    if (parent != null) {
-                        parent.removeView(instance.textureView);
+                    // Hide TextureView using INVISIBLE instead of removing from parent
+                    // This maintains the view hierarchy and z-order
+                    instance.textureView.setVisibility(android.view.View.INVISIBLE);
+                    try {
+                        instance.player.clearVideoTextureView(instance.textureView);
+                    } catch (Exception e) {
+                        // Ignore
                     }
                 }
                 players.remove(playerId);
@@ -894,10 +902,9 @@ public class ExoPlayerSignagePlugin extends Plugin {
                         instance.player.release();
                     }
                     if (instance.textureView != null) {
-                        ViewGroup parent = (ViewGroup) instance.textureView.getParent();
-                        if (parent != null) {
-                            parent.removeView(instance.textureView);
-                        }
+                        // Hide TextureView using INVISIBLE instead of removing from parent
+                        // This maintains the view hierarchy and z-order
+                        instance.textureView.setVisibility(android.view.View.INVISIBLE);
                     }
                 }
                 players.clear();
