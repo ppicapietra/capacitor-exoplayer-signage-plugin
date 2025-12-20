@@ -230,12 +230,38 @@ public class ExoPlayerSignagePlugin extends Plugin {
                         if (grandchild instanceof ViewGroup) {
                             ViewGroup frameLayout = (ViewGroup) grandchild;
                             android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: Found ViewGroup child in LinearLayout: " + frameLayout.getClass().getName());
+                            android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: FrameLayout dimensions: " + frameLayout.getWidth() + "x" + frameLayout.getHeight());
+                            
                             if (frameLayout.getBackground() != null) {
                                 android.util.Log.w("ExoPlayerSignage", "⚠️ FrameLayout has background - attempting to make transparent");
                                 frameLayout.setBackgroundColor(android.graphics.Color.TRANSPARENT);
                                 android.util.Log.d("ExoPlayerSignage", "✅ Set FrameLayout background to TRANSPARENT");
                             } else {
                                 android.util.Log.d("ExoPlayerSignage", "✅ FrameLayout already has no background (transparent)");
+                            }
+                            
+                            // If FrameLayout covers the entire screen, it's likely covering the SurfaceView
+                            if (frameLayout.getWidth() > 0 && frameLayout.getHeight() > 0 && 
+                                frameLayout.getWidth() == videoSurfaceView.getWidth() && 
+                                frameLayout.getHeight() == videoSurfaceView.getHeight()) {
+                                android.util.Log.w("ExoPlayerSignage", "⚠️ FrameLayout tiene las mismas dimensiones que SurfaceView (1280x720)");
+                                android.util.Log.w("ExoPlayerSignage", "⚠️ El contenido HTML dentro del WebView probablemente tiene fondo opaco");
+                                android.util.Log.w("ExoPlayerSignage", "⚠️ SOLUCIÓN: El HTML debe tener fondo transparente cuando no hay contenido modal");
+                                
+                                // Try to find WebView inside FrameLayout
+                                for (int k = 0; k < frameLayout.getChildCount(); k++) {
+                                    android.view.View webViewCandidate = frameLayout.getChildAt(k);
+                                    android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: FrameLayout child " + k + ": " + webViewCandidate.getClass().getName());
+                                    if (webViewCandidate.getClass().getName().contains("WebView")) {
+                                        android.util.Log.d("ExoPlayerSignage", "🌐 Found WebView inside FrameLayout!");
+                                        try {
+                                            webViewCandidate.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+                                            android.util.Log.d("ExoPlayerSignage", "✅ Set WebView background to TRANSPARENT");
+                                        } catch (Exception e) {
+                                            android.util.Log.w("ExoPlayerSignage", "⚠️ Could not set WebView background: " + e.getMessage());
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -275,11 +301,11 @@ public class ExoPlayerSignagePlugin extends Plugin {
                 android.util.Log.d("ExoPlayerSignage", "    No background (transparent)");
             }
             
-            // If it's a ViewGroup, check its children too
+            // If it's a ViewGroup, check its children too (recursively to find WebView)
             if (child instanceof ViewGroup) {
                 ViewGroup vg = (ViewGroup) child;
                 android.util.Log.d("ExoPlayerSignage", "    Is ViewGroup with " + vg.getChildCount() + " children");
-                for (int j = 0; j < Math.min(vg.getChildCount(), 5); j++) { // Limit to first 5 children
+                for (int j = 0; j < Math.min(vg.getChildCount(), 10); j++) { // Check up to 10 children
                     android.view.View grandchild = vg.getChildAt(j);
                     android.util.Log.d("ExoPlayerSignage", "      Grandchild " + j + ": " + grandchild.getClass().getName());
                     android.util.Log.d("ExoPlayerSignage", "        Dimensions: " + grandchild.getWidth() + "x" + grandchild.getHeight());
@@ -301,15 +327,29 @@ public class ExoPlayerSignagePlugin extends Plugin {
                     if (grandchild.getClass().getName().contains("WebView")) {
                         android.util.Log.d("ExoPlayerSignage", "        🌐 Found WebView!");
                         try {
-                            // Try to set WebView background transparent
                             grandchild.setBackgroundColor(android.graphics.Color.TRANSPARENT);
                             android.util.Log.d("ExoPlayerSignage", "        ✅ Set WebView background to TRANSPARENT");
-                            
-                            // Also try to set alpha to make it semi-transparent (but this might affect content)
-                            // Actually, don't do this as it will make HTML content transparent too
-                            // grandchild.setAlpha(0.5f);
                         } catch (Exception e) {
                             android.util.Log.w("ExoPlayerSignage", "        ⚠️ Could not set WebView background: " + e.getMessage());
+                        }
+                    }
+                    
+                    // Recursively search for WebView in nested ViewGroups
+                    if (grandchild instanceof ViewGroup) {
+                        ViewGroup nestedVg = (ViewGroup) grandchild;
+                        android.util.Log.d("ExoPlayerSignage", "        Is nested ViewGroup with " + nestedVg.getChildCount() + " children");
+                        for (int k = 0; k < Math.min(nestedVg.getChildCount(), 10); k++) {
+                            android.view.View greatGrandchild = nestedVg.getChildAt(k);
+                            android.util.Log.d("ExoPlayerSignage", "          Great-grandchild " + k + ": " + greatGrandchild.getClass().getName());
+                            if (greatGrandchild.getClass().getName().contains("WebView")) {
+                                android.util.Log.d("ExoPlayerSignage", "          🌐 Found WebView in nested ViewGroup!");
+                                try {
+                                    greatGrandchild.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+                                    android.util.Log.d("ExoPlayerSignage", "          ✅ Set nested WebView background to TRANSPARENT");
+                                } catch (Exception e) {
+                                    android.util.Log.w("ExoPlayerSignage", "          ⚠️ Could not set nested WebView background: " + e.getMessage());
+                                }
+                            }
                         }
                     }
                     
