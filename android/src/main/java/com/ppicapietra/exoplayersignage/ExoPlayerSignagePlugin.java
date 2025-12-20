@@ -89,14 +89,34 @@ public class ExoPlayerSignagePlugin extends Plugin {
         
         // Create SurfaceView
         videoSurfaceView = new SurfaceView(getContext());
+        
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT,
             FrameLayout.LayoutParams.MATCH_PARENT
         );
         videoSurfaceView.setLayoutParams(params);
         
+        // Set background color to black (will show if video doesn't render)
+        videoSurfaceView.setBackgroundColor(android.graphics.Color.BLACK);
+        
+        // Set z-order to ensure it's below WebView (which has z-order 10000)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+            videoSurfaceView.setZ(1000f);
+            videoSurfaceView.setElevation(100f);
+        }
+        
         // Add SurfaceView to root view at index 0 (background, below WebView)
         rootView.addView(videoSurfaceView, 0);
+        
+        // Log view hierarchy for debugging
+        android.util.Log.d("ExoPlayerSignage", "✅ Created SurfaceView and added to rootView at index 0");
+        android.util.Log.d("ExoPlayerSignage", "RootView child count: " + rootView.getChildCount());
+        for (int i = 0; i < rootView.getChildCount(); i++) {
+            android.view.View child = rootView.getChildAt(i);
+            android.util.Log.d("ExoPlayerSignage", "  Child " + i + ": " + child.getClass().getName() + 
+                " (visibility: " + (child.getVisibility() == android.view.View.VISIBLE ? "VISIBLE" : 
+                child.getVisibility() == android.view.View.INVISIBLE ? "INVISIBLE" : "GONE") + ")");
+        }
         
         // Initially hidden - visibility will be controlled by the app
         videoSurfaceView.setVisibility(android.view.View.INVISIBLE);
@@ -328,9 +348,40 @@ public class ExoPlayerSignagePlugin extends Plugin {
                 // For video players, associate SurfaceView AFTER MediaItem is set but BEFORE prepare()
                 // This ensures the SurfaceView is ready when the player prepares
                 if ("video".equals(instance.type) && instance.surfaceView != null) {
+                    android.util.Log.d("ExoPlayerSignage", "🎬 Associating SurfaceView with player");
+                    android.util.Log.d("ExoPlayerSignage", "SurfaceView parent: " + 
+                        (instance.surfaceView.getParent() != null ? instance.surfaceView.getParent().getClass().getName() : "null"));
+                    android.util.Log.d("ExoPlayerSignage", "SurfaceView visibility BEFORE: " + 
+                        (instance.surfaceView.getVisibility() == android.view.View.VISIBLE ? "VISIBLE" : 
+                        instance.surfaceView.getVisibility() == android.view.View.INVISIBLE ? "INVISIBLE" : "GONE"));
+                    
                     player.setVideoSurfaceView(instance.surfaceView);
+                    
                     // Make SurfaceView visible when playing video
                     instance.surfaceView.setVisibility(android.view.View.VISIBLE);
+                    
+                    android.util.Log.d("ExoPlayerSignage", "✅ SurfaceView visibility AFTER: VISIBLE");
+                    android.util.Log.d("ExoPlayerSignage", "SurfaceView isShown: " + instance.surfaceView.isShown());
+                    android.util.Log.d("ExoPlayerSignage", "SurfaceView width: " + instance.surfaceView.getWidth() + ", height: " + instance.surfaceView.getHeight());
+                    
+                    // Verify SurfaceView is still in rootView
+                    ViewGroup parent = (ViewGroup) instance.surfaceView.getParent();
+                    if (parent != null) {
+                        android.util.Log.d("ExoPlayerSignage", "✅ SurfaceView parent verified: " + parent.getClass().getName());
+                        android.util.Log.d("ExoPlayerSignage", "Parent child count: " + parent.getChildCount());
+                        for (int i = 0; i < parent.getChildCount(); i++) {
+                            android.view.View child = parent.getChildAt(i);
+                            if (child == instance.surfaceView) {
+                                android.util.Log.d("ExoPlayerSignage", "  ✅ Found SurfaceView at index " + i);
+                            } else {
+                                android.util.Log.d("ExoPlayerSignage", "  Child " + i + ": " + child.getClass().getName() + 
+                                    " (visibility: " + (child.getVisibility() == android.view.View.VISIBLE ? "VISIBLE" : 
+                                    child.getVisibility() == android.view.View.INVISIBLE ? "INVISIBLE" : "GONE") + ")");
+                            }
+                        }
+                    } else {
+                        android.util.Log.e("ExoPlayerSignage", "❌ ERROR: SurfaceView has no parent!");
+                    }
                 }
                 
                 player.prepare();
@@ -462,12 +513,27 @@ public class ExoPlayerSignagePlugin extends Plugin {
         activity.runOnUiThread(() -> {
             try {
                 if (videoSurfaceView != null) {
+                    android.util.Log.d("ExoPlayerSignage", "🔧 setVideoSurfaceVisibility called: " + visible);
+                    android.util.Log.d("ExoPlayerSignage", "SurfaceView visibility BEFORE: " + 
+                        (videoSurfaceView.getVisibility() == android.view.View.VISIBLE ? "VISIBLE" : 
+                        videoSurfaceView.getVisibility() == android.view.View.INVISIBLE ? "INVISIBLE" : "GONE"));
+                    android.util.Log.d("ExoPlayerSignage", "SurfaceView parent: " + 
+                        (videoSurfaceView.getParent() != null ? videoSurfaceView.getParent().getClass().getName() : "null"));
+                    android.util.Log.d("ExoPlayerSignage", "SurfaceView isShown: " + videoSurfaceView.isShown());
+                    
                     videoSurfaceView.setVisibility(visible ? android.view.View.VISIBLE : android.view.View.INVISIBLE);
+                    
+                    android.util.Log.d("ExoPlayerSignage", "✅ SurfaceView visibility AFTER: " + 
+                        (visible ? "VISIBLE" : "INVISIBLE"));
+                    android.util.Log.d("ExoPlayerSignage", "SurfaceView isShown AFTER: " + videoSurfaceView.isShown());
+                    
                     call.resolve();
                 } else {
+                    android.util.Log.e("ExoPlayerSignage", "❌ Video SurfaceView not created yet");
                     call.reject("Video SurfaceView not created yet");
                 }
             } catch (Exception e) {
+                android.util.Log.e("ExoPlayerSignage", "❌ Error setting SurfaceView visibility: " + e.getMessage(), e);
                 call.reject("Error setting SurfaceView visibility: " + e.getMessage(), e);
             }
         });
