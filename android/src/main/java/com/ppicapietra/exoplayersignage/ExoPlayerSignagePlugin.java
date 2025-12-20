@@ -1056,16 +1056,24 @@ public class ExoPlayerSignagePlugin extends Plugin {
                     int playbackState = instance.player.getPlaybackState();
                     boolean isPlaying = instance.player.isPlaying();
                     
+                    // Make SurfaceView visible when showing
+                    instance.surfaceView.setVisibility(android.view.View.VISIBLE);
+                    android.util.Log.d("ExoPlayerSignage", "👁️ SurfaceView set to VISIBLE in show()");
+                    
                     // If player is in STATE_IDLE (after stop()), prepare and play
                     if (playbackState == Player.STATE_IDLE) {
+                        android.util.Log.d("ExoPlayerSignage", "🔄 Player in STATE_IDLE, preparing and playing");
                         instance.player.prepare();
                         instance.player.play();
                     } else if (!isPlaying) {
                         // Player is paused - resume playback
+                        android.util.Log.d("ExoPlayerSignage", "▶️ Player paused, resuming playback");
                         instance.player.play();
+                    } else {
+                        android.util.Log.d("ExoPlayerSignage", "✅ Player already playing");
                     }
                     
-                    // Visibility is controlled by the app, not by the plugin
+                    // Visibility is controlled by the app, but we ensure it's visible when show() is called
                 }
                 call.resolve();
             } catch (Exception e) {
