@@ -9,7 +9,7 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 
 import android.net.Uri;
 import android.content.Context;
-import android.view.TextureView;
+import android.view.SurfaceView;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
@@ -41,73 +41,33 @@ public class ExoPlayerSignagePlugin extends Plugin {
     // Map to store player instances by ID
     private Map<String, PlayerInstance> players = new HashMap<>();
     
-    // Container for all video TextureViews with controlled z-order
+    // Shared SurfaceView for video playback - added directly to rootView at index 0
     // This ensures videos stay below the WebView (which contains the modal HTML)
-    private FrameLayout videoContainer;
+    private SurfaceView videoSurfaceView;
     
     // Helper class to manage a single player instance
     private static class PlayerInstance {
         ExoPlayer player;
-        TextureView textureView; // Changed from TextureView to TextureView for better z-order integration
+        SurfaceView surfaceView; // SurfaceView for video playback
         String type; // "video" or "audio"
         String id;
         
-        PlayerInstance(ExoPlayer player, TextureView textureView, String type, String id) {
+        PlayerInstance(ExoPlayer player, SurfaceView surfaceView, String type, String id) {
             this.player = player;
-            this.textureView = textureView;
+            this.surfaceView = surfaceView;
             this.type = type;
             this.id = id;
         }
     }
     
-    // Helper method to remove ALL TextureViews from the view hierarchy (for debugging)
-    private void removeAllTextureViewsFromRoot() {
-        android.app.Activity activity = getBridge().getActivity();
-        if (activity == null) return;
-        
-        activity.runOnUiThread(() -> {
-            try {
-                ViewGroup rootView = (ViewGroup) activity.findViewById(android.R.id.content);
-                if (rootView != null) {
-                    // Find and remove all TextureViews
-                    java.util.ArrayList<TextureView> textureViews = new java.util.ArrayList<>();
-                    findTextureViews(rootView, textureViews);
-                    for (TextureView tv : textureViews) {
-                        try {
-                            ViewGroup parent = (ViewGroup) tv.getParent();
-                            if (parent != null) {
-                                parent.removeView(tv);
-                            }
-                        } catch (Exception e) {
-                            // Ignore
-                        }
-                    }
-                }
-            } catch (Exception e) {
-                // Ignore
-            }
-        });
-    }
-    
-    private void findTextureViews(ViewGroup parent, java.util.ArrayList<TextureView> result) {
-        for (int i = 0; i < parent.getChildCount(); i++) {
-            android.view.View child = parent.getChildAt(i);
-            if (child instanceof TextureView) {
-                result.add((TextureView) child);
-            } else if (child instanceof ViewGroup) {
-                findTextureViews((ViewGroup) child, result);
-            }
-        }
-    }
-    
     /**
-     * Get or create the video container FrameLayout with controlled z-order.
-     * This container ensures all video TextureViews stay below the WebView.
+     * Get or create the SurfaceView for video playback.
+     * SurfaceView is added directly to rootView at index 0 to ensure it stays below WebView.
      * Note: This method should only be called from the UI thread (runOnUiThread).
      */
-    private FrameLayout getOrCreateVideoContainer() {
-        if (videoContainer != null) {
-            return videoContainer;
+    private SurfaceView getOrCreateVideoSurfaceView() {
+        if (videoSurfaceView != null) {
+            return videoSurfaceView;
         }
         
         android.app.Activity activity = getBridge().getActivity();
@@ -122,34 +82,26 @@ public class ExoPlayerSignagePlugin extends Plugin {
             return null;
         }
         
-        ViewGroup rootView = (ViewGroup) activity.findViewById(android.R.id.content);
+        FrameLayout rootView = (FrameLayout) activity.findViewById(android.R.id.content);
         if (rootView == null) {
             return null;
         }
         
-        // Create FrameLayout container
-        videoContainer = new FrameLayout(getContext());
+        // Create SurfaceView
+        videoSurfaceView = new SurfaceView(getContext());
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT,
             FrameLayout.LayoutParams.MATCH_PARENT
         );
-        videoContainer.setLayoutParams(params);
+        videoSurfaceView.setLayoutParams(params);
         
-        // Set z-order to 1000 (low, below WebView)
-        // NOTE: The WebView should have its z-order set in MainActivity.java to ensure
-        // it stays above this container. This plugin only manages its own container's z-order.
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-            videoContainer.setZ(1000f);
-        }
+        // Add SurfaceView to root view at index 0 (background, below WebView)
+        rootView.addView(videoSurfaceView, 0);
         
-        // Add container to root view at the BEGINNING (index 0) to ensure it's below WebView
-        // The WebView should already be in the hierarchy with a higher z-order set in MainActivity
-        rootView.addView(videoContainer, 0);
+        // Initially hidden - visibility will be controlled by the app
+        videoSurfaceView.setVisibility(android.view.View.INVISIBLE);
         
-        // Initially hidden - will be shown when videos are added
-        videoContainer.setVisibility(android.view.View.GONE);
-        
-        return videoContainer;
+        return videoSurfaceView;
     }
     
 
@@ -219,11 +171,11 @@ public class ExoPlayerSignagePlugin extends Plugin {
                                         .setDataSourceFactory(cacheDataSourceFactory))
                         .build();
                 
-                TextureView textureView = null;
+                SurfaceView surfaceView = null;
                 
                 if ("video".equals(type)) {
-                    // Don't create TextureView here - it will be created when video is played
-                    // TextureView respects z-order better than TextureView, allowing HTML elements to appear on top
+                    // Get or create shared SurfaceView for video playback
+                    surfaceView = getOrCreateVideoSurfaceView();
                     
                     // Configure AudioAttributes for video
                     AudioAttributes audioAttributes = new AudioAttributes.Builder()
@@ -232,7 +184,7 @@ public class ExoPlayerSignagePlugin extends Plugin {
                             .build();
                     player.setAudioAttributes(audioAttributes, false);
                 } else {
-                    // Audio player - no TextureView needed
+                    // Audio player - no SurfaceView needed
                     // Configure AudioAttributes for audio
                     AudioAttributes audioAttributes = new AudioAttributes.Builder()
                             .setUsage(C.USAGE_MEDIA)
@@ -260,7 +212,7 @@ public class ExoPlayerSignagePlugin extends Plugin {
                 player.setRepeatMode(ExoPlayer.REPEAT_MODE_OFF);
                 
                 // Store player instance
-                PlayerInstance instance = new PlayerInstance(player, textureView, type, playerId);
+                PlayerInstance instance = new PlayerInstance(player, surfaceView, type, playerId);
                 players.put(playerId, instance);
                 
                 JSObject result = new JSObject();
@@ -293,9 +245,7 @@ public class ExoPlayerSignagePlugin extends Plugin {
             return;
         }
         
-        Boolean visibleValue = call.getBoolean("visible", true);
-        boolean visible = visibleValue != null ? visibleValue : true;
-        
+        // Visibility is controlled by the app, not by the plugin
         android.app.Activity activity = getBridge().getActivity();
         if (activity == null) {
             call.reject("Activity not available");
@@ -307,100 +257,30 @@ public class ExoPlayerSignagePlugin extends Plugin {
                 ExoPlayer player = instance.player;
                 
                 // Stop any current playback before setting new media item
-                // This must be done BEFORE creating/associating TextureView to avoid conflicts
                 if (player.getPlaybackState() != Player.STATE_IDLE) {
                     player.stop();
                 }
                 
                 if ("video".equals(instance.type)) {
-                    // Video playback - create TextureView ONLY if visible is true
-                    // TextureView respects z-order, allowing HTML elements (modal, images) to appear on top
-                    if (!visible) {
-                        // Don't create or show TextureView if not visible
-                        if (instance.textureView != null) {
-                            // Hide TextureView using INVISIBLE (keep it in container)
-                            try {
-                                player.clearVideoTextureView(instance.textureView);
-                            } catch (Exception e) {
-                                // Ignore
-                            }
-                            // Use INVISIBLE instead of removing from parent
-                            instance.textureView.setVisibility(android.view.View.INVISIBLE);
-                            
-                            // DO NOT hide container - keep it visible to maintain z-order
-                            // Container visibility should be managed separately, not based on TextureView visibility
-                            
-                            // DO NOT remove from parent - keep it in container
-                        }
-                    } else {
-                        // visible is true - create TextureView if needed
-                        // Get or create video container (with controlled z-order)
-                        FrameLayout container = getOrCreateVideoContainer();
-                        
-                        if (instance.textureView == null) {
-                            instance.textureView = new TextureView(getContext());
-                            FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
-                                FrameLayout.LayoutParams.MATCH_PARENT,
-                                FrameLayout.LayoutParams.MATCH_PARENT
-                            );
-                            instance.textureView.setLayoutParams(params);
-                            
-                            // Add TextureView to video container (not root view)
-                            // Container has z-order 1000, ensuring it stays below WebView
-                            if (container != null) {
-                                container.addView(instance.textureView);
-                                container.setVisibility(android.view.View.VISIBLE);
-                            }
-                        } else {
-                            // TextureView exists but might not be in layout - re-add if needed
-                            ViewGroup parent = (ViewGroup) instance.textureView.getParent();
-                            if (parent == null) {
-                                // Add to container if not already in layout
-                                if (container != null) {
-                                    container.addView(instance.textureView);
-                                    container.setVisibility(android.view.View.VISIBLE);
-                                }
-                            } else if (parent != container) {
-                                // TextureView is in wrong parent (e.g., root view) - move to container
-                                // This is a migration case - hide first, then move
-                                instance.textureView.setVisibility(android.view.View.INVISIBLE);
-                                try {
-                                    parent.removeView(instance.textureView);
-                                } catch (Exception e) {
-                                    // Ignore
-                                }
-                                if (container != null) {
-                                    container.addView(instance.textureView);
-                                    container.setVisibility(android.view.View.VISIBLE);
-                                }
-                            }
-                        }
-                        
-                        // Show TextureView
-                        instance.textureView.setVisibility(android.view.View.VISIBLE);
-                        // Note: We'll associate TextureView with player AFTER MediaItem is set (see below)
+                    // Video playback - ensure SurfaceView exists and is associated
+                    // Visibility is controlled by the app, not by the plugin
+                    if (instance.surfaceView == null) {
+                        instance.surfaceView = getOrCreateVideoSurfaceView();
                     }
+                    
+                    // Associate SurfaceView with player AFTER MediaItem is set but BEFORE prepare()
+                    // This ensures the SurfaceView is ready when the player prepares
                 } else {
-                    // Audio playback - ensure NO TextureView exists or is visible
-                    // Audio players should NEVER have a TextureView
-                    if (instance.textureView != null) {
-                        // Clear video texture first
+                    // Audio playback - ensure NO SurfaceView is associated
+                    // Audio players should NEVER have a SurfaceView
+                    if (instance.surfaceView != null) {
                         try {
-                            player.clearVideoTextureView(instance.textureView);
+                            player.clearVideoSurface();
                         } catch (Exception e) {
                             // Ignore errors
                         }
-                        
-                        // Hide TextureView using INVISIBLE (keep in layout but hidden)
-                        // Don't remove from parent - use visibility instead
-                        instance.textureView.setVisibility(android.view.View.INVISIBLE);
-                        
-                        // IMPORTANT: Set to null to ensure it's never reused for audio
-                        instance.textureView = null;
+                        // Don't modify visibility - that's controlled by the app
                     }
-                    
-                    // Ensure no video texture is set on the player
-                    // Note: clearVideoTextureView requires a TextureView parameter, so we only clear if one exists
                 }
                 
                 // Get auth token from call if provided
@@ -445,10 +325,10 @@ public class ExoPlayerSignagePlugin extends Plugin {
                     player.setMediaItem(mediaItem);
                 }
                 
-                // For video players, associate TextureView AFTER MediaItem is set but BEFORE prepare()
-                // This ensures the TextureView is ready when the player prepares
-                if ("video".equals(instance.type) && visible && instance.textureView != null) {
-                    player.setVideoTextureView(instance.textureView);
+                // For video players, associate SurfaceView AFTER MediaItem is set but BEFORE prepare()
+                // This ensures the SurfaceView is ready when the player prepares
+                if ("video".equals(instance.type) && instance.surfaceView != null) {
+                    player.setVideoSurfaceView(instance.surfaceView);
                 }
                 
                 player.prepare();
@@ -523,39 +403,9 @@ public class ExoPlayerSignagePlugin extends Plugin {
         activity.runOnUiThread(() -> {
             try {
                 instance.player.stop();
-                // Remove TextureView when stopped (for video players only)
-                // CRITICAL: Audio players should NEVER have a TextureView
-                if ("audio".equals(instance.type)) {
-                    if (instance.textureView != null) {
-                        try {
-                            instance.player.clearVideoTextureView(instance.textureView);
-                        } catch (Exception e) {
-                            // Ignore
-                        }
-                        // Hide TextureView using INVISIBLE (keep in layout but hidden)
-                        // Don't remove from parent - use visibility instead
-                        instance.textureView.setVisibility(android.view.View.INVISIBLE);
-                        instance.textureView = null;
-                    }
-                } else if (instance.textureView != null) {
-                    // Video player - hide TextureView but keep it in container for reuse
-                    // CRITICAL: DO NOT call clearVideoTextureView() here - it desassociates the TextureView
-                    // from the player, making it impossible to restore playback later
-                    // Instead, just pause and hide the TextureView
-                    instance.player.pause();
-                    // Hide TextureView using INVISIBLE (keeps it in layout, maintains z-order)
-                    instance.textureView.setVisibility(android.view.View.INVISIBLE);
-                    
-                    // CRITICAL: Ensure container remains VISIBLE even when TextureView is INVISIBLE
-                    // This maintains the z-order and allows quick restoration
-                    FrameLayout container = getOrCreateVideoContainer();
-                    if (container != null) {
-                        container.setVisibility(android.view.View.VISIBLE);
-                    }
-                    
-                    // Don't set to null - we'll reuse it when video plays again
-                    // Don't remove from parent - keep it in container to maintain z-order
-                }
+                // For video players, keep SurfaceView associated - don't clear it
+                // Visibility is controlled by the app, not by the plugin
+                // Audio players should NEVER have a SurfaceView
                 call.resolve();
             } catch (Exception e) {
                 call.reject("Error stopping: " + e.getMessage(), e);
@@ -618,64 +468,18 @@ public class ExoPlayerSignagePlugin extends Plugin {
         
         activity.runOnUiThread(() -> {
             try {
-                // Pause playback to ensure TextureView doesn't block UI
+                // Pause playback
                 if (instance.player != null) {
                     instance.player.pause();
                 }
                 
-                // CRITICAL: Audio players should NEVER have a TextureView - ensure it's null
-                if ("audio".equals(instance.type)) {
-                    if (instance.textureView != null) {
-                        try {
-                            instance.player.clearVideoTextureView(instance.textureView);
-                        } catch (Exception e) {
-                            // Ignore
-                        }
-                        // Hide TextureView using INVISIBLE (keep in layout but hidden)
-                        // Don't remove from parent - use visibility instead
-                        instance.textureView.setVisibility(android.view.View.INVISIBLE);
-                        instance.textureView = null;
-                    }
-                    // DO NOT call removeAllTextureViewsFromRoot() - it removes TextureViews from container
-                    call.resolve();
-                    return;
-                }
-                
-                // Hide TextureView without removing it from layout (video only)
-                // This allows it to be shown again later without recreation
-                if (instance.textureView != null) {
-                    // Pause playback but DO NOT clear video texture
-                    // CRITICAL: clearVideoTextureView() desassociates the TextureView from the player,
-                    // making it impossible to restore playback later without recreating the TextureView
-                    if (instance.player != null) {
-                        try {
-                            instance.player.pause();
-                            // DO NOT call clearVideoTextureView() here - keep TextureView associated with player
-                        } catch (Exception e) {
-                            // Ignore errors
-                        }
-                    }
-                    // Set visibility to INVISIBLE to hide it (but keep it in the container)
-                    // Using INVISIBLE instead of GONE maintains layout space and z-order
-                    instance.textureView.setVisibility(android.view.View.INVISIBLE);
-                    
-                    // CRITICAL: Ensure container remains VISIBLE even when TextureView is INVISIBLE
-                    // This maintains the z-order and allows quick restoration
-                    FrameLayout container = getOrCreateVideoContainer();
-                    if (container != null) {
-                        container.setVisibility(android.view.View.VISIBLE);
-                    }
-                    
-                    // DO NOT remove TextureView from parent
-                    // DO NOT set instance.textureView = null
-                    // This allows show() to restore it quickly without recreation
-                }
-                
-                // DO NOT call removeAllTextureViewsFromRoot() - it removes TextureViews from container
+                // Visibility is controlled by the app, not by the plugin
+                // Don't modify SurfaceView visibility here
+                // Audio players should NEVER have a SurfaceView
                 
                 call.resolve();
             } catch (Exception e) {
-                call.reject("Error hiding TextureView: " + e.getMessage(), e);
+                call.reject("Error hiding SurfaceView: " + e.getMessage(), e);
             }
         });
     }
@@ -702,114 +506,48 @@ public class ExoPlayerSignagePlugin extends Plugin {
         
         activity.runOnUiThread(() -> {
             try {
-                // CRITICAL: Audio players should NEVER have a TextureView
+                // CRITICAL: Audio players should NEVER have a SurfaceView
                 if ("audio".equals(instance.type)) {
-                    // Ensure no TextureView exists for audio
-                    if (instance.textureView != null) {
+                    // Ensure no SurfaceView is associated for audio
+                    if (instance.surfaceView != null) {
                         try {
-                            instance.player.clearVideoTextureView(instance.textureView);
+                            instance.player.clearVideoSurface();
                         } catch (Exception e) {
                             // Ignore
                         }
-                        // Hide TextureView using INVISIBLE (keep in layout but hidden)
-                        // Don't remove from parent - use visibility instead
-                        instance.textureView.setVisibility(android.view.View.INVISIBLE);
-                        instance.textureView = null;
                     }
                     call.resolve();
                     return;
                 }
                 
-                // Only show TextureView for video players
-                // CRITICAL: Show TextureView even if player is in STATE_IDLE (after stop())
-                // This allows restoring video after modal closes
+                // For video players, ensure SurfaceView is associated and resume playback if needed
                 if ("video".equals(instance.type) && instance.player != null) {
+                    // Ensure SurfaceView exists
+                    if (instance.surfaceView == null) {
+                        instance.surfaceView = getOrCreateVideoSurfaceView();
+                    }
+                    
+                    // Associate SurfaceView with player
+                    instance.player.setVideoSurfaceView(instance.surfaceView);
+                    
                     // Check player state
                     int playbackState = instance.player.getPlaybackState();
                     boolean isPlaying = instance.player.isPlaying();
                     
-                    // Show TextureView if player has content (not STATE_IDLE) OR if TextureView exists
-                    // This allows restoring after stop() when player is in STATE_IDLE
-                    if (playbackState != Player.STATE_IDLE || instance.textureView != null) {
-                        // Get or create video container
-                        FrameLayout container = getOrCreateVideoContainer();
-                        
-                        // Recreate TextureView only if it was completely removed (null)
-                        if (instance.textureView == null) {
-                            instance.textureView = new TextureView(getContext());
-                            FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
-                                FrameLayout.LayoutParams.MATCH_PARENT,
-                                FrameLayout.LayoutParams.MATCH_PARENT
-                            );
-                            instance.textureView.setLayoutParams(params);
-                            
-                            // Add TextureView to video container (not root view)
-                            if (container != null) {
-                                container.addView(instance.textureView);
-                                container.setVisibility(android.view.View.VISIBLE);
-                            }
-                        } else {
-                            // TextureView exists - check if it's in the correct container
-                            ViewGroup parent = (ViewGroup) instance.textureView.getParent();
-                            if (parent == null) {
-                                // TextureView was removed from parent - re-add to container
-                                if (container != null) {
-                                    container.addView(instance.textureView);
-                                    container.setVisibility(android.view.View.VISIBLE);
-                                }
-                            } else if (parent != container) {
-                                // TextureView is in wrong parent (e.g., root view) - move to container
-                                // This is a migration case - hide first, then move
-                                instance.textureView.setVisibility(android.view.View.INVISIBLE);
-                                try {
-                                    parent.removeView(instance.textureView);
-                                } catch (Exception e) {
-                                    // Ignore
-                                }
-                                if (container != null) {
-                                    container.addView(instance.textureView);
-                                    container.setVisibility(android.view.View.VISIBLE);
-                                }
-                            } else {
-                                // TextureView is already in correct container - just show container
-                                if (container != null) {
-                                    container.setVisibility(android.view.View.VISIBLE);
-                                }
-                            }
-                        }
-                        
-                        // Show TextureView and associate with player
-                        instance.textureView.setVisibility(android.view.View.VISIBLE);
-                        instance.player.setVideoTextureView(instance.textureView);
-                        
-                        // If player is in STATE_IDLE (after stop()), prepare and play
-                        if (playbackState == Player.STATE_IDLE) {
-                            // Player was stopped - prepare and start playback
-                            instance.player.prepare();
-                            instance.player.play();
-                        } else if (!isPlaying) {
-                            // Player is paused - resume playback
-                            instance.player.play();
-                        }
-                    } else {
-                        // Player is in STATE_IDLE and TextureView doesn't exist - nothing to show
-                        // This shouldn't happen in normal flow, but handle gracefully
-                        if (instance.textureView != null) {
-                            try {
-                                instance.player.clearVideoTextureView(instance.textureView);
-                            } catch (Exception e) {
-                                // Ignore
-                            }
-                            // Hide using INVISIBLE (keeps it in layout, maintains z-order)
-                            instance.textureView.setVisibility(android.view.View.INVISIBLE);
-                            
-                            // DO NOT hide container - keep it visible to maintain z-order
-                        }
+                    // If player is in STATE_IDLE (after stop()), prepare and play
+                    if (playbackState == Player.STATE_IDLE) {
+                        instance.player.prepare();
+                        instance.player.play();
+                    } else if (!isPlaying) {
+                        // Player is paused - resume playback
+                        instance.player.play();
                     }
+                    
+                    // Visibility is controlled by the app, not by the plugin
                 }
                 call.resolve();
             } catch (Exception e) {
-                call.reject("Error showing TextureView: " + e.getMessage(), e);
+                call.reject("Error showing SurfaceView: " + e.getMessage(), e);
             }
         });
     }
@@ -832,28 +570,20 @@ public class ExoPlayerSignagePlugin extends Plugin {
         if (activity != null) {
             activity.runOnUiThread(() -> {
                 if (instance.player != null) {
-                    if (instance.textureView != null) {
-                        instance.player.clearVideoTextureView(instance.textureView);
+                    if (instance.surfaceView != null && "video".equals(instance.type)) {
+                        instance.player.clearVideoSurface();
                     }
                     instance.player.release();
                 }
-                if (instance.textureView != null) {
-                    // Hide TextureView using INVISIBLE instead of removing from parent
-                    // This maintains the view hierarchy and z-order
-                    instance.textureView.setVisibility(android.view.View.INVISIBLE);
-                    try {
-                        instance.player.clearVideoTextureView(instance.textureView);
-                    } catch (Exception e) {
-                        // Ignore
-                    }
-                }
+                // Don't remove SurfaceView - it's shared and reused
+                // Visibility is controlled by the app
                 players.remove(playerId);
                 call.resolve();
             });
         } else {
             if (instance.player != null) {
-                if (instance.textureView != null) {
-                    instance.player.clearVideoTextureView(instance.textureView);
+                if (instance.surfaceView != null && "video".equals(instance.type)) {
+                    instance.player.clearVideoSurface();
                 }
                 instance.player.release();
             }
@@ -870,18 +600,16 @@ public class ExoPlayerSignagePlugin extends Plugin {
                 // Release all players
                 for (PlayerInstance instance : players.values()) {
                     if (instance.player != null) {
-                        if (instance.textureView != null) {
-                            instance.player.clearVideoTextureView(instance.textureView);
+                        if (instance.surfaceView != null && "video".equals(instance.type)) {
+                            instance.player.clearVideoSurface();
                         }
                         instance.player.release();
                     }
-                    if (instance.textureView != null) {
-                        // Hide TextureView using INVISIBLE instead of removing from parent
-                        // This maintains the view hierarchy and z-order
-                        instance.textureView.setVisibility(android.view.View.INVISIBLE);
-                    }
                 }
                 players.clear();
+                
+                // Don't remove SurfaceView - it's shared and will be cleaned up by Android
+                // Visibility is controlled by the app
                 
                 if (cache != null) {
                     cache.release();
@@ -891,8 +619,8 @@ public class ExoPlayerSignagePlugin extends Plugin {
         } else {
             for (PlayerInstance instance : players.values()) {
                 if (instance.player != null) {
-                    if (instance.textureView != null) {
-                        instance.player.clearVideoTextureView(instance.textureView);
+                    if (instance.surfaceView != null && "video".equals(instance.type)) {
+                        instance.player.clearVideoSurface();
                     }
                     instance.player.release();
                 }
