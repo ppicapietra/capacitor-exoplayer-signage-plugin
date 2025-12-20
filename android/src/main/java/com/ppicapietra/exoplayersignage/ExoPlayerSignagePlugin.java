@@ -101,43 +101,98 @@ public class ExoPlayerSignagePlugin extends Plugin {
         );
         videoSurfaceView.setLayoutParams(params);
         
-        // Set background color to transparent
-        videoSurfaceView.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+        // Set background color to MAGENTA for debugging (to visually detect SurfaceView)
+        videoSurfaceView.setBackgroundColor(android.graphics.Color.MAGENTA);
+        android.util.Log.d("ExoPlayerSignage", "🎨 DEBUG: SurfaceView background set to MAGENTA for visual debugging");
         
         // Set up SurfaceHolder callback to ensure SurfaceView is ready before associating with player
         videoSurfaceView.getHolder().addCallback(new android.view.SurfaceHolder.Callback() {
             @Override
             public void surfaceCreated(android.view.SurfaceHolder holder) {
                 android.util.Log.d("ExoPlayerSignage", "✅ SurfaceHolder created - SurfaceView is ready");
+                android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: SurfaceHolder.isValid: " + (holder.getSurface() != null && holder.getSurface().isValid()));
+                if (holder.getSurface() != null) {
+                    android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: Surface size: " + holder.getSurfaceFrame().width() + "x" + holder.getSurfaceFrame().height());
+                }
+                android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: SurfaceView visibility: " + 
+                    (videoSurfaceView.getVisibility() == android.view.View.VISIBLE ? "VISIBLE" : 
+                     videoSurfaceView.getVisibility() == android.view.View.INVISIBLE ? "INVISIBLE" : "GONE"));
+                android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: SurfaceView dimensions: " + 
+                    videoSurfaceView.getWidth() + "x" + videoSurfaceView.getHeight());
+                android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: SurfaceView isShown: " + videoSurfaceView.isShown());
+                android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: pendingPlayer is " + (pendingPlayer != null ? "NOT null" : "null"));
+                
                 // If there's a pending player, associate it now
                 if (pendingPlayer != null) {
                     android.util.Log.d("ExoPlayerSignage", "🎬 Associating pending player with SurfaceView");
+                    android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: Player state BEFORE association: " + 
+                        getPlaybackStateString(pendingPlayer.getPlaybackState()));
+                    android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: Player isPlaying BEFORE: " + pendingPlayer.isPlaying());
+                    
                     pendingPlayer.setVideoSurfaceView(videoSurfaceView);
+                    
+                    android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: Player state AFTER association: " + 
+                        getPlaybackStateString(pendingPlayer.getPlaybackState()));
+                    android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: Player isPlaying AFTER: " + pendingPlayer.isPlaying());
+                    
                     // Ensure SurfaceView is visible when player is associated
                     videoSurfaceView.setVisibility(android.view.View.VISIBLE);
                     android.util.Log.d("ExoPlayerSignage", "✅ SurfaceView visibility set to VISIBLE (player associated)");
+                    android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: SurfaceView isShown after setting VISIBLE: " + videoSurfaceView.isShown());
+                    
                     pendingPlayer = null; // Clear pending player
+                } else {
+                    android.util.Log.d("ExoPlayerSignage", "⚠️ DEBUG: No pending player to associate");
                 }
             }
             
             @Override
             public void surfaceChanged(android.view.SurfaceHolder holder, int format, int width, int height) {
                 android.util.Log.d("ExoPlayerSignage", "SurfaceHolder changed: " + width + "x" + height);
+                android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: SurfaceHolder format: " + format);
+                android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: SurfaceView dimensions: " + 
+                    videoSurfaceView.getWidth() + "x" + videoSurfaceView.getHeight());
+                android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: SurfaceView visibility: " + 
+                    (videoSurfaceView.getVisibility() == android.view.View.VISIBLE ? "VISIBLE" : 
+                     videoSurfaceView.getVisibility() == android.view.View.INVISIBLE ? "INVISIBLE" : "GONE"));
+                android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: SurfaceView isShown: " + videoSurfaceView.isShown());
+                android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: SurfaceView parent: " + 
+                    (videoSurfaceView.getParent() != null ? videoSurfaceView.getParent().getClass().getName() : "null"));
+                
                 // Ensure SurfaceView is visible if there's a player associated with it
                 // Check if any video player is currently playing
+                boolean foundPlayer = false;
                 for (PlayerInstance instance : players.values()) {
                     if ("video".equals(instance.type) && instance.surfaceView == videoSurfaceView) {
+                        foundPlayer = true;
                         ExoPlayer player = instance.player;
-                        if (player != null && player.getPlaybackState() != Player.STATE_IDLE && 
-                            player.getPlaybackState() != Player.STATE_ENDED) {
-                            // Player is playing or buffering - ensure SurfaceView is visible
-                            if (videoSurfaceView.getVisibility() != android.view.View.VISIBLE) {
-                                videoSurfaceView.setVisibility(android.view.View.VISIBLE);
-                                android.util.Log.d("ExoPlayerSignage", "✅ SurfaceView visibility set to VISIBLE (player is playing)");
+                        android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: Found video player instance: " + instance.id);
+                        if (player != null) {
+                            android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: Player state: " + getPlaybackStateString(player.getPlaybackState()));
+                            android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: Player isPlaying: " + player.isPlaying());
+                            android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: Player currentPosition: " + player.getCurrentPosition() + "ms");
+                            android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: Player duration: " + player.getDuration() + "ms");
+                            
+                            if (player.getPlaybackState() != Player.STATE_IDLE && 
+                                player.getPlaybackState() != Player.STATE_ENDED) {
+                                // Player is playing or buffering - ensure SurfaceView is visible
+                                if (videoSurfaceView.getVisibility() != android.view.View.VISIBLE) {
+                                    videoSurfaceView.setVisibility(android.view.View.VISIBLE);
+                                    android.util.Log.d("ExoPlayerSignage", "✅ SurfaceView visibility set to VISIBLE (player is playing)");
+                                } else {
+                                    android.util.Log.d("ExoPlayerSignage", "✅ SurfaceView already VISIBLE");
+                                }
+                            } else {
+                                android.util.Log.d("ExoPlayerSignage", "⚠️ DEBUG: Player is IDLE or ENDED, not ensuring visibility");
                             }
-                            break;
+                        } else {
+                            android.util.Log.w("ExoPlayerSignage", "⚠️ DEBUG: Player instance has null player!");
                         }
+                        break;
                     }
+                }
+                if (!foundPlayer) {
+                    android.util.Log.w("ExoPlayerSignage", "⚠️ DEBUG: No video player instance found for this SurfaceView!");
                 }
             }
             
@@ -156,6 +211,10 @@ public class ExoPlayerSignagePlugin extends Plugin {
         // This ensures it's below everything else (WebView, LinearLayout, etc.)
         decorView.addView(videoSurfaceView, 0);
         android.util.Log.d("ExoPlayerSignage", "✅ Added SurfaceView to DecorView at index 0 (background layer)");
+        android.util.Log.d("ExoPlayerSignage", "📊 DEBUG: DecorView child count after adding SurfaceView: " + decorView.getChildCount());
+        android.util.Log.d("ExoPlayerSignage", "📏 DEBUG: SurfaceView dimensions after adding: " + 
+            videoSurfaceView.getWidth() + "x" + videoSurfaceView.getHeight());
+        android.util.Log.d("ExoPlayerSignage", "👁️ DEBUG: SurfaceView isShown after adding: " + videoSurfaceView.isShown());
         
         // Log view hierarchy for debugging
         ViewGroup parent = (ViewGroup) videoSurfaceView.getParent();
@@ -420,18 +479,31 @@ public class ExoPlayerSignagePlugin extends Plugin {
                 // Wait for SurfaceHolder to be ready before associating
                 if ("video".equals(instance.type) && instance.surfaceView != null) {
                     android.util.Log.d("ExoPlayerSignage", "🎬 Preparing to associate SurfaceView with player");
+                    android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: Player state BEFORE association: " + getPlaybackStateString(player.getPlaybackState()));
+                    android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: URL: " + url);
                     android.util.Log.d("ExoPlayerSignage", "SurfaceView parent: " + 
                         (instance.surfaceView.getParent() != null ? instance.surfaceView.getParent().getClass().getName() : "null"));
                     android.util.Log.d("ExoPlayerSignage", "SurfaceView visibility BEFORE: " + 
                         (instance.surfaceView.getVisibility() == android.view.View.VISIBLE ? "VISIBLE" : 
                         instance.surfaceView.getVisibility() == android.view.View.INVISIBLE ? "INVISIBLE" : "GONE"));
+                    android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: SurfaceView dimensions BEFORE: " + 
+                        instance.surfaceView.getWidth() + "x" + instance.surfaceView.getHeight());
+                    android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: SurfaceView isShown BEFORE: " + instance.surfaceView.isShown());
                     
                     // Check if SurfaceHolder is already ready
                     android.view.SurfaceHolder holder = instance.surfaceView.getHolder();
+                    android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: SurfaceHolder check - surface != null: " + 
+                        (holder.getSurface() != null));
+                    if (holder.getSurface() != null) {
+                        android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: SurfaceHolder.isValid: " + holder.getSurface().isValid());
+                        android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: SurfaceHolder frame: " + holder.getSurfaceFrame().width() + "x" + holder.getSurfaceFrame().height());
+                    }
+                    
                     if (holder.getSurface() != null && holder.getSurface().isValid()) {
                         // SurfaceHolder is ready - associate immediately
                         android.util.Log.d("ExoPlayerSignage", "✅ SurfaceHolder is ready - associating immediately");
                         player.setVideoSurfaceView(instance.surfaceView);
+                        android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: Player state AFTER setVideoSurfaceView: " + getPlaybackStateString(player.getPlaybackState()));
                         pendingPlayer = null; // Clear any pending player
                     } else {
                         // SurfaceHolder not ready yet - store player for callback
@@ -482,7 +554,54 @@ public class ExoPlayerSignagePlugin extends Plugin {
                     }
                 }
                 
+                // Add player event listener for debugging
+                if ("video".equals(instance.type)) {
+                    player.addListener(new Player.Listener() {
+                        @Override
+                        public void onPlaybackStateChanged(int playbackState) {
+                            android.util.Log.d("ExoPlayerSignage", "🔄 DEBUG: Player playbackState changed to: " + getPlaybackStateString(playbackState));
+                            android.util.Log.d("ExoPlayerSignage", "🔄 DEBUG: Player isPlaying: " + player.isPlaying());
+                            android.util.Log.d("ExoPlayerSignage", "🔄 DEBUG: Player currentPosition: " + player.getCurrentPosition() + "ms");
+                            if (instance.surfaceView != null) {
+                                android.util.Log.d("ExoPlayerSignage", "🔄 DEBUG: SurfaceView visibility: " + 
+                                    (instance.surfaceView.getVisibility() == android.view.View.VISIBLE ? "VISIBLE" : 
+                                     instance.surfaceView.getVisibility() == android.view.View.INVISIBLE ? "INVISIBLE" : "GONE"));
+                                android.util.Log.d("ExoPlayerSignage", "🔄 DEBUG: SurfaceView isShown: " + instance.surfaceView.isShown());
+                                android.util.Log.d("ExoPlayerSignage", "🔄 DEBUG: SurfaceView dimensions: " + 
+                                    instance.surfaceView.getWidth() + "x" + instance.surfaceView.getHeight());
+                            }
+                        }
+                        
+                        @Override
+                        public void onIsPlayingChanged(boolean isPlaying) {
+                            android.util.Log.d("ExoPlayerSignage", "▶️ DEBUG: Player isPlaying changed to: " + isPlaying);
+                            android.util.Log.d("ExoPlayerSignage", "▶️ DEBUG: Player playbackState: " + getPlaybackStateString(player.getPlaybackState()));
+                            if (instance.surfaceView != null) {
+                                android.util.Log.d("ExoPlayerSignage", "▶️ DEBUG: SurfaceView visibility: " + 
+                                    (instance.surfaceView.getVisibility() == android.view.View.VISIBLE ? "VISIBLE" : 
+                                     instance.surfaceView.getVisibility() == android.view.View.INVISIBLE ? "INVISIBLE" : "GONE"));
+                            }
+                        }
+                    });
+                }
+                
+                android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: About to call player.prepare()");
+                android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: Player state BEFORE prepare: " + getPlaybackStateString(player.getPlaybackState()));
+                if ("video".equals(instance.type) && instance.surfaceView != null) {
+                    android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: SurfaceView visibility BEFORE prepare: " + 
+                        (instance.surfaceView.getVisibility() == android.view.View.VISIBLE ? "VISIBLE" : 
+                         instance.surfaceView.getVisibility() == android.view.View.INVISIBLE ? "INVISIBLE" : "GONE"));
+                }
+                
                 player.prepare();
+                
+                android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: Player state AFTER prepare: " + getPlaybackStateString(player.getPlaybackState()));
+                if ("video".equals(instance.type) && instance.surfaceView != null) {
+                    android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: SurfaceView visibility AFTER prepare: " + 
+                        (instance.surfaceView.getVisibility() == android.view.View.VISIBLE ? "VISIBLE" : 
+                         instance.surfaceView.getVisibility() == android.view.View.INVISIBLE ? "INVISIBLE" : "GONE"));
+                    android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: SurfaceView isShown AFTER prepare: " + instance.surfaceView.isShown());
+                }
                 
                 // Ensure volume is set correctly (especially for audio after video)
                 if ("audio".equals(instance.type)) {
@@ -492,7 +611,31 @@ public class ExoPlayerSignagePlugin extends Plugin {
                 }
                 
                 // Start playback
+                android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: About to call player.play()");
+                android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: Player state BEFORE play: " + getPlaybackStateString(player.getPlaybackState()));
+                if ("video".equals(instance.type) && instance.surfaceView != null) {
+                    android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: SurfaceView visibility BEFORE play: " + 
+                        (instance.surfaceView.getVisibility() == android.view.View.VISIBLE ? "VISIBLE" : 
+                         instance.surfaceView.getVisibility() == android.view.View.INVISIBLE ? "INVISIBLE" : "GONE"));
+                }
+                
                 player.play();
+                
+                android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: Player state AFTER play: " + getPlaybackStateString(player.getPlaybackState()));
+                android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: Player isPlaying AFTER play: " + player.isPlaying());
+                if ("video".equals(instance.type) && instance.surfaceView != null) {
+                    android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: SurfaceView visibility AFTER play: " + 
+                        (instance.surfaceView.getVisibility() == android.view.View.VISIBLE ? "VISIBLE" : 
+                         instance.surfaceView.getVisibility() == android.view.View.INVISIBLE ? "INVISIBLE" : "GONE"));
+                    android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: SurfaceView isShown AFTER play: " + instance.surfaceView.isShown());
+                    android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: SurfaceView dimensions AFTER play: " + 
+                        instance.surfaceView.getWidth() + "x" + instance.surfaceView.getHeight());
+                }
+                
+                // Schedule periodic status checks for video players
+                if ("video".equals(instance.type) && instance.surfaceView != null) {
+                    schedulePeriodicStatusCheck(instance);
+                }
                 
                 call.resolve();
             } catch (Exception e) {
@@ -848,5 +991,80 @@ public class ExoPlayerSignagePlugin extends Plugin {
                 cache = null;
             }
         }
+    }
+    
+    /**
+     * Helper method to convert playback state to readable string
+     */
+    private String getPlaybackStateString(int state) {
+        switch (state) {
+            case Player.STATE_IDLE:
+                return "STATE_IDLE";
+            case Player.STATE_BUFFERING:
+                return "STATE_BUFFERING";
+            case Player.STATE_READY:
+                return "STATE_READY";
+            case Player.STATE_ENDED:
+                return "STATE_ENDED";
+            default:
+                return "UNKNOWN(" + state + ")";
+        }
+    }
+    
+    /**
+     * Schedule periodic status checks for video player debugging
+     */
+    private void schedulePeriodicStatusCheck(PlayerInstance instance) {
+        android.os.Handler handler = new android.os.Handler(android.os.Looper.getMainLooper());
+        handler.postDelayed(new Runnable() {
+            private int checkCount = 0;
+            private final int maxChecks = 10; // Check 10 times (every 2 seconds = 20 seconds total)
+            
+            @Override
+            public void run() {
+                if (checkCount >= maxChecks) {
+                    android.util.Log.d("ExoPlayerSignage", "⏱️ DEBUG: Stopping periodic status checks (max reached)");
+                    return;
+                }
+                
+                checkCount++;
+                android.util.Log.d("ExoPlayerSignage", "⏱️ DEBUG: Periodic check #" + checkCount);
+                
+                if (instance.player != null && "video".equals(instance.type)) {
+                    android.util.Log.d("ExoPlayerSignage", "⏱️ DEBUG: Player state: " + getPlaybackStateString(instance.player.getPlaybackState()));
+                    android.util.Log.d("ExoPlayerSignage", "⏱️ DEBUG: Player isPlaying: " + instance.player.isPlaying());
+                    android.util.Log.d("ExoPlayerSignage", "⏱️ DEBUG: Player currentPosition: " + instance.player.getCurrentPosition() + "ms");
+                    android.util.Log.d("ExoPlayerSignage", "⏱️ DEBUG: Player duration: " + instance.player.getDuration() + "ms");
+                    
+                    if (instance.surfaceView != null) {
+                        android.util.Log.d("ExoPlayerSignage", "⏱️ DEBUG: SurfaceView visibility: " + 
+                            (instance.surfaceView.getVisibility() == android.view.View.VISIBLE ? "VISIBLE" : 
+                             instance.surfaceView.getVisibility() == android.view.View.INVISIBLE ? "INVISIBLE" : "GONE"));
+                        android.util.Log.d("ExoPlayerSignage", "⏱️ DEBUG: SurfaceView isShown: " + instance.surfaceView.isShown());
+                        android.util.Log.d("ExoPlayerSignage", "⏱️ DEBUG: SurfaceView dimensions: " + 
+                            instance.surfaceView.getWidth() + "x" + instance.surfaceView.getHeight());
+                        android.util.Log.d("ExoPlayerSignage", "⏱️ DEBUG: SurfaceView parent: " + 
+                            (instance.surfaceView.getParent() != null ? instance.surfaceView.getParent().getClass().getName() : "null"));
+                        
+                        // Check SurfaceHolder
+                        android.view.SurfaceHolder holder = instance.surfaceView.getHolder();
+                        if (holder != null && holder.getSurface() != null) {
+                            android.util.Log.d("ExoPlayerSignage", "⏱️ DEBUG: SurfaceHolder isValid: " + holder.getSurface().isValid());
+                            android.util.Log.d("ExoPlayerSignage", "⏱️ DEBUG: SurfaceHolder frame: " + 
+                                holder.getSurfaceFrame().width() + "x" + holder.getSurfaceFrame().height());
+                        } else {
+                            android.util.Log.w("ExoPlayerSignage", "⏱️ DEBUG: SurfaceHolder is null or has no surface!");
+                        }
+                    } else {
+                        android.util.Log.w("ExoPlayerSignage", "⏱️ DEBUG: SurfaceView is null!");
+                    }
+                    
+                    // Schedule next check (every 2 seconds)
+                    handler.postDelayed(this, 2000);
+                } else {
+                    android.util.Log.d("ExoPlayerSignage", "⏱️ DEBUG: Player instance is null or not video, stopping checks");
+                }
+            }
+        }, 2000); // First check after 2 seconds
     }
 }
