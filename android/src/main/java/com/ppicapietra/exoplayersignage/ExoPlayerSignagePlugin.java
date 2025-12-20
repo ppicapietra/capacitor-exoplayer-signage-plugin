@@ -41,20 +41,22 @@ public class ExoPlayerSignagePlugin extends Plugin {
     // Map to store player instances by ID
     private Map<String, PlayerInstance> players = new HashMap<>();
     
+    // Container for all video TextureViews with controlled z-order
+    // This ensures videos stay below the WebView (which contains the modal HTML)
+    private FrameLayout videoContainer;
+    
     // Helper class to manage a single player instance
     private static class PlayerInstance {
         ExoPlayer player;
         TextureView textureView; // Changed from TextureView to TextureView for better z-order integration
         String type; // "video" or "audio"
         String id;
-        Float zIndex; // Optional z-index for TextureView (null = use bringToFront())
         
-        PlayerInstance(ExoPlayer player, TextureView textureView, String type, String id, Float zIndex) {
+        PlayerInstance(ExoPlayer player, TextureView textureView, String type, String id) {
             this.player = player;
             this.textureView = textureView;
             this.type = type;
             this.id = id;
-            this.zIndex = zIndex;
         }
     }
     
@@ -96,6 +98,57 @@ public class ExoPlayerSignagePlugin extends Plugin {
                 findTextureViews((ViewGroup) child, result);
             }
         }
+    }
+    
+    /**
+     * Get or create the video container FrameLayout with controlled z-order.
+     * This container ensures all video TextureViews stay below the WebView.
+     * Note: This method should only be called from the UI thread (runOnUiThread).
+     */
+    private FrameLayout getOrCreateVideoContainer() {
+        if (videoContainer != null) {
+            return videoContainer;
+        }
+        
+        android.app.Activity activity = getBridge().getActivity();
+        if (activity == null) {
+            return null;
+        }
+        
+        // Ensure we're on UI thread
+        if (android.os.Looper.myLooper() != android.os.Looper.getMainLooper()) {
+            // Not on UI thread - this shouldn't happen as we call from runOnUiThread blocks
+            // But if it does, return null and let the caller handle it
+            return null;
+        }
+        
+        ViewGroup rootView = (ViewGroup) activity.findViewById(android.R.id.content);
+        if (rootView == null) {
+            return null;
+        }
+        
+        // Create FrameLayout container
+        videoContainer = new FrameLayout(getContext());
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.MATCH_PARENT
+        );
+        videoContainer.setLayoutParams(params);
+        
+        // Set z-order to 1000 (low, below WebView which should be 10000+)
+        // This ensures videos stay below the modal HTML content
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+            videoContainer.setZ(1000f);
+        }
+        
+        // Add container to root view (at the beginning to ensure it's below WebView)
+        // Inserting at index 0 ensures it's below other views added later
+        rootView.addView(videoContainer, 0);
+        
+        // Initially hidden - will be shown when videos are added
+        videoContainer.setVisibility(android.view.View.GONE);
+        
+        return videoContainer;
     }
 
     private long getSafeCacheSize() {
@@ -205,7 +258,7 @@ public class ExoPlayerSignagePlugin extends Plugin {
                 player.setRepeatMode(ExoPlayer.REPEAT_MODE_OFF);
                 
                 // Store player instance
-                PlayerInstance instance = new PlayerInstance(player, textureView, type, playerId, zIndex);
+                PlayerInstance instance = new PlayerInstance(player, textureView, type, playerId);
                 players.put(playerId, instance);
                 
                 JSObject result = new JSObject();
@@ -281,6 +334,9 @@ public class ExoPlayerSignagePlugin extends Plugin {
                         }
                     } else {
                         // visible is true - create TextureView if needed
+                        // Get or create video container (with controlled z-order)
+                        FrameLayout container = getOrCreateVideoContainer();
+                        
                         if (instance.textureView == null) {
                             instance.textureView = new TextureView(getContext());
                             FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
@@ -289,48 +345,31 @@ public class ExoPlayerSignagePlugin extends Plugin {
                             );
                             instance.textureView.setLayoutParams(params);
                             
-                            // Add TextureView to root view
-                            ViewGroup rootView = (ViewGroup) activity.findViewById(android.R.id.content);
-                            if (rootView != null) {
-                                rootView.addView(instance.textureView);
-                                
-                                // Apply z-index if defined, otherwise use bringToFront()
-                                if (instance.zIndex != null) {
-                                    // Use setZ() for API 21+ (Android 5.0+)
-                                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-                                        instance.textureView.setZ(instance.zIndex);
-                                    }
-                                } else {
-                                    // Default behavior: bring to front
-                                    instance.textureView.bringToFront();
-                                }
+                            // Add TextureView to video container (not root view)
+                            // Container has z-order 1000, ensuring it stays below WebView
+                            if (container != null) {
+                                container.addView(instance.textureView);
+                                container.setVisibility(android.view.View.VISIBLE);
                             }
                         } else {
                             // TextureView exists but might not be in layout - re-add if needed
                             ViewGroup parent = (ViewGroup) instance.textureView.getParent();
                             if (parent == null) {
-                                ViewGroup rootView = (ViewGroup) activity.findViewById(android.R.id.content);
-                                if (rootView != null) {
-                                    rootView.addView(instance.textureView);
-                                    
-                                    // Apply z-index if defined, otherwise use bringToFront()
-                                    if (instance.zIndex != null) {
-                                        // Use setZ() for API 21+ (Android 5.0+)
-                                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-                                            instance.textureView.setZ(instance.zIndex);
-                                        }
-                                    } else {
-                                        // Default behavior: bring to front
-                                        instance.textureView.bringToFront();
-                                    }
+                                // Add to container if not already in layout
+                                if (container != null) {
+                                    container.addView(instance.textureView);
+                                    container.setVisibility(android.view.View.VISIBLE);
                                 }
-                            } else {
-                                // TextureView is already in layout - apply z-index if defined
-                                if (instance.zIndex != null) {
-                                    // Use setZ() for API 21+ (Android 5.0+)
-                                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-                                        instance.textureView.setZ(instance.zIndex);
-                                    }
+                            } else if (parent != container) {
+                                // TextureView is in wrong parent (e.g., root view) - move to container
+                                try {
+                                    parent.removeView(instance.textureView);
+                                } catch (Exception e) {
+                                    // Ignore
+                                }
+                                if (container != null) {
+                                    container.addView(instance.textureView);
+                                    container.setVisibility(android.view.View.VISIBLE);
                                 }
                             }
                         }
@@ -513,11 +552,15 @@ public class ExoPlayerSignagePlugin extends Plugin {
                 } else if (instance.textureView != null) {
                     // Video player - remove TextureView but keep reference for reuse
                     instance.player.clearVideoTextureView(instance.textureView);
-                    // Remove from view hierarchy
+                    // Remove from view hierarchy (should be in videoContainer)
                     ViewGroup parent = (ViewGroup) instance.textureView.getParent();
                     if (parent != null) {
                         try {
                             parent.removeView(instance.textureView);
+                            // Hide container if empty
+                            if (parent == videoContainer && videoContainer.getChildCount() == 0) {
+                                videoContainer.setVisibility(android.view.View.GONE);
+                            }
                         } catch (Exception e) {
                             // Ignore
                         }
@@ -628,11 +671,15 @@ public class ExoPlayerSignagePlugin extends Plugin {
                     }
                     // Set visibility to GONE first to stop rendering
                     instance.textureView.setVisibility(android.view.View.GONE);
-                    // Remove from view hierarchy
+                    // Remove from view hierarchy (should be in videoContainer)
                     ViewGroup parent = (ViewGroup) instance.textureView.getParent();
                     if (parent != null) {
                         try {
                             parent.removeView(instance.textureView);
+                            // Hide container if empty
+                            if (parent == videoContainer && videoContainer.getChildCount() == 0) {
+                                videoContainer.setVisibility(android.view.View.GONE);
+                            }
                         } catch (Exception e) {
                             // Ignore errors when removing view
                         }
@@ -707,6 +754,9 @@ public class ExoPlayerSignagePlugin extends Plugin {
                     
                     // Only create/show TextureView if player is actually playing
                     if (playbackState != Player.STATE_IDLE && isPlaying) {
+                        // Get or create video container
+                        FrameLayout container = getOrCreateVideoContainer();
+                        
                         // Recreate TextureView if it was removed
                         if (instance.textureView == null) {
                             instance.textureView = new TextureView(getContext());
@@ -716,48 +766,30 @@ public class ExoPlayerSignagePlugin extends Plugin {
                             );
                             instance.textureView.setLayoutParams(params);
                             
-                            // Add TextureView to root view
-                            ViewGroup rootView = (ViewGroup) activity.findViewById(android.R.id.content);
-                            if (rootView != null) {
-                                rootView.addView(instance.textureView);
-                                
-                                // Apply z-index if defined, otherwise use bringToFront()
-                                if (instance.zIndex != null) {
-                                    // Use setZ() for API 21+ (Android 5.0+)
-                                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-                                        instance.textureView.setZ(instance.zIndex);
-                                    }
-                                } else {
-                                    // Default behavior: bring to front
-                                    instance.textureView.bringToFront();
-                                }
+                            // Add TextureView to video container (not root view)
+                            if (container != null) {
+                                container.addView(instance.textureView);
+                                container.setVisibility(android.view.View.VISIBLE);
                             }
                         } else {
                             // TextureView exists but might not be in layout - re-add if needed
                             ViewGroup parent = (ViewGroup) instance.textureView.getParent();
                             if (parent == null) {
-                                ViewGroup rootView = (ViewGroup) activity.findViewById(android.R.id.content);
-                                if (rootView != null) {
-                                    rootView.addView(instance.textureView);
-                                    
-                                    // Apply z-index if defined, otherwise use bringToFront()
-                                    if (instance.zIndex != null) {
-                                        // Use setZ() for API 21+ (Android 5.0+)
-                                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-                                            instance.textureView.setZ(instance.zIndex);
-                                        }
-                                    } else {
-                                        // Default behavior: bring to front
-                                        instance.textureView.bringToFront();
-                                    }
+                                // Add to container if not already in layout
+                                if (container != null) {
+                                    container.addView(instance.textureView);
+                                    container.setVisibility(android.view.View.VISIBLE);
                                 }
-                            } else {
-                                // TextureView is already in layout - apply z-index if defined
-                                if (instance.zIndex != null) {
-                                    // Use setZ() for API 21+ (Android 5.0+)
-                                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-                                        instance.textureView.setZ(instance.zIndex);
-                                    }
+                            } else if (parent != container) {
+                                // TextureView is in wrong parent - move to container
+                                try {
+                                    parent.removeView(instance.textureView);
+                                } catch (Exception e) {
+                                    // Ignore
+                                }
+                                if (container != null) {
+                                    container.addView(instance.textureView);
+                                    container.setVisibility(android.view.View.VISIBLE);
                                 }
                             }
                         }
@@ -777,6 +809,10 @@ public class ExoPlayerSignagePlugin extends Plugin {
                             if (parent != null) {
                                 try {
                                     parent.removeView(instance.textureView);
+                                    // Hide container if empty
+                                    if (parent == videoContainer && videoContainer.getChildCount() == 0) {
+                                        videoContainer.setVisibility(android.view.View.GONE);
+                                    }
                                 } catch (Exception e) {
                                     // Ignore
                                 }
