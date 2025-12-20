@@ -130,86 +130,28 @@ public class ExoPlayerSignagePlugin extends Plugin {
             }
         });
         
-        // Set z-order to ensure it's below WebView (which has z-order 10000)
-        // SurfaceView should be below WebView but above background
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-            videoSurfaceView.setZ(1000f);  // Below WebView (10000) but visible
-            videoSurfaceView.setElevation(100f);
-        }
+        // DO NOT set z-order or elevation - SurfaceView should be at the bottom layer
+        // It will be below WebView naturally because it's added first to DecorView
         
-        // Find LinearLayout (which contains ContentFrameLayout with WebView)
-        // We want to add SurfaceView INSIDE LinearLayout at index 0, so it's below WebView but visible
-        android.view.ViewGroup linearLayout = null;
-        for (int i = 0; i < decorView.getChildCount(); i++) {
-            android.view.View child = decorView.getChildAt(i);
-            if (child.getClass().getName().contains("LinearLayout")) {
-                linearLayout = (android.view.ViewGroup) child;
-                break;
-            }
-        }
+        // Add SurfaceView directly to DecorView at index 0 (background layer)
+        // This ensures it's below everything else (WebView, LinearLayout, etc.)
+        decorView.addView(videoSurfaceView, 0);
+        android.util.Log.d("ExoPlayerSignage", "✅ Added SurfaceView to DecorView at index 0 (background layer)");
         
-        if (linearLayout != null) {
-            // Add SurfaceView INSIDE LinearLayout at index 0 (lowest, below WebView)
-            linearLayout.addView(videoSurfaceView, 0);
-            android.util.Log.d("ExoPlayerSignage", "✅ Added SurfaceView INSIDE LinearLayout at index 0 (below WebView)");
-            
-            // Ensure FrameLayout (which contains WebView) has higher z-order than SurfaceView
-            // This ensures WebView is above video but below modal HTML (z-index 99999)
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-                for (int i = 0; i < linearLayout.getChildCount(); i++) {
-                    android.view.View child = linearLayout.getChildAt(i);
-                    if (child != videoSurfaceView && child instanceof ViewGroup) {
-                        // This is likely the FrameLayout containing WebView
-                        // Set its z-order higher than SurfaceView (1100) but lower than modal (99999)
-                        child.setZ(2000f);
-                        child.setElevation(200f);
-                        android.util.Log.d("ExoPlayerSignage", "✅ Set z-order 2000 on " + child.getClass().getName() + " (above SurfaceView)");
-                    }
-                }
-            }
-        } else {
-            // Fallback: try to find ContentFrameLayout
-            android.view.ViewGroup contentFrameLayout = null;
-            for (int i = 0; i < decorView.getChildCount(); i++) {
-                android.view.View child = decorView.getChildAt(i);
-                if (child.getClass().getName().contains("ContentFrameLayout") || 
-                    child.getClass().getName().contains("FrameLayout")) {
-                    contentFrameLayout = (android.view.ViewGroup) child;
-                    break;
-                }
-            }
-            
-            if (contentFrameLayout != null) {
-                // Add SurfaceView INSIDE ContentFrameLayout at index 0
-                contentFrameLayout.addView(videoSurfaceView, 0);
-                android.util.Log.d("ExoPlayerSignage", "✅ Added SurfaceView INSIDE ContentFrameLayout at index 0");
-            } else {
-                // Last resort: add to decorView at index 0
-                decorView.addView(videoSurfaceView, 0);
-                android.util.Log.d("ExoPlayerSignage", "⚠️ Added SurfaceView to decorView at index 0 (LinearLayout/ContentFrameLayout not found)");
-            }
-        }
-        
-        // Log view hierarchy for debugging and ensure proper z-order
+        // Log view hierarchy for debugging
         ViewGroup parent = (ViewGroup) videoSurfaceView.getParent();
         if (parent != null) {
             android.util.Log.d("ExoPlayerSignage", "✅ Created SurfaceView and added to: " + parent.getClass().getName());
             android.util.Log.d("ExoPlayerSignage", "Parent child count: " + parent.getChildCount());
             
-            // Ensure all other children (especially FrameLayout with WebView) have higher z-order
+            // Verify SurfaceView has no z-order set (should be 0 or default)
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-                for (int i = 0; i < parent.getChildCount(); i++) {
-                    android.view.View child = parent.getChildAt(i);
-                    if (child != videoSurfaceView && child instanceof ViewGroup) {
-                        // Set z-order higher than SurfaceView (1100) but lower than modal HTML (99999)
-                        float childZ = child.getZ();
-                        if (childZ < 2000f) {
-                            child.setZ(2000f);
-                            child.setElevation(200f);
-                            android.util.Log.d("ExoPlayerSignage", "✅ Set z-order 2000 on " + child.getClass().getName() + 
-                                " (was " + childZ + ", now above SurfaceView)");
-                        }
-                    }
+                float surfaceZ = videoSurfaceView.getZ();
+                if (surfaceZ != 0f) {
+                    android.util.Log.w("ExoPlayerSignage", "⚠️ SurfaceView has z-order " + surfaceZ + " (should be 0)");
+                    videoSurfaceView.setZ(0f);
+                    videoSurfaceView.setElevation(0f);
+                    android.util.Log.d("ExoPlayerSignage", "✅ Reset SurfaceView z-order to 0");
                 }
             }
             
@@ -485,33 +427,22 @@ public class ExoPlayerSignagePlugin extends Plugin {
                     android.util.Log.d("ExoPlayerSignage", "SurfaceView isShown: " + instance.surfaceView.isShown());
                     android.util.Log.d("ExoPlayerSignage", "SurfaceView width: " + instance.surfaceView.getWidth() + ", height: " + instance.surfaceView.getHeight());
                     
-                    // Verify SurfaceView is still in rootView and ensure proper z-order
+                    // Verify SurfaceView is still in DecorView
                     ViewGroup parent = (ViewGroup) instance.surfaceView.getParent();
                     if (parent != null) {
                         android.util.Log.d("ExoPlayerSignage", "✅ SurfaceView parent verified: " + parent.getClass().getName());
                         android.util.Log.d("ExoPlayerSignage", "Parent child count: " + parent.getChildCount());
                         
-                        // Get SurfaceView z-order
-                        float surfaceZ = 0f;
+                        // Verify SurfaceView has no z-order (should be 0)
                         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-                            surfaceZ = instance.surfaceView.getZ();
-                            
-                            // Ensure all other ViewGroups have higher z-order than SurfaceView
-                            for (int i = 0; i < parent.getChildCount(); i++) {
-                                android.view.View child = parent.getChildAt(i);
-                                if (child != instance.surfaceView && child instanceof ViewGroup) {
-                                    float childZ = child.getZ();
-                                    if (childZ <= surfaceZ) {
-                                        // This ViewGroup (likely FrameLayout with WebView) needs higher z-order
-                                        child.setZ(2000f);
-                                        child.setElevation(200f);
-                                        android.util.Log.d("ExoPlayerSignage", "✅ Fixed z-order on " + child.getClass().getName() + 
-                                            " (was " + childZ + ", now 2000 - above SurfaceView)");
-                                    }
-                                }
+                            float surfaceZ = instance.surfaceView.getZ();
+                            if (surfaceZ != 0f) {
+                                android.util.Log.w("ExoPlayerSignage", "⚠️ SurfaceView has z-order " + surfaceZ + " (should be 0) - resetting");
+                                instance.surfaceView.setZ(0f);
+                                instance.surfaceView.setElevation(0f);
                             }
+                            android.util.Log.d("ExoPlayerSignage", "SurfaceView z-order: " + instance.surfaceView.getZ());
                         }
-                        android.util.Log.d("ExoPlayerSignage", "SurfaceView z-order: " + surfaceZ);
                         
                         for (int i = 0; i < parent.getChildCount(); i++) {
                             android.view.View child = parent.getChildAt(i);
@@ -520,13 +451,7 @@ public class ExoPlayerSignagePlugin extends Plugin {
                             } else {
                                 String zInfo = "";
                                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-                                    float childZ = child.getZ();
-                                    zInfo = " (z: " + childZ + ", elevation: " + child.getElevation() + ")";
-                                    if (childZ > surfaceZ) {
-                                        zInfo += " ✅ ABOVE SurfaceView";
-                                    } else if (childZ <= surfaceZ && child instanceof ViewGroup) {
-                                        zInfo += " ⚠️ BELOW or EQUAL to SurfaceView (should be above!)";
-                                    }
+                                    zInfo = " (z: " + child.getZ() + ", elevation: " + child.getElevation() + ")";
                                 }
                                 android.util.Log.d("ExoPlayerSignage", "  Child " + i + ": " + child.getClass().getName() + 
                                     " (visibility: " + (child.getVisibility() == android.view.View.VISIBLE ? "VISIBLE" : 
