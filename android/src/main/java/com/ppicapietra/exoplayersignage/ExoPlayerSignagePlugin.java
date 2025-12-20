@@ -82,8 +82,10 @@ public class ExoPlayerSignagePlugin extends Plugin {
             return null;
         }
         
-        FrameLayout rootView = (FrameLayout) activity.findViewById(android.R.id.content);
-        if (rootView == null) {
+        // Get the decorView (the root of the window)
+        // This ensures the SurfaceView is added at the very bottom of the view hierarchy
+        android.view.ViewGroup decorView = (android.view.ViewGroup) activity.getWindow().getDecorView();
+        if (decorView == null) {
             return null;
         }
         
@@ -99,23 +101,46 @@ public class ExoPlayerSignagePlugin extends Plugin {
         // Set background color to black (will show if video doesn't render)
         videoSurfaceView.setBackgroundColor(android.graphics.Color.BLACK);
         
-        // Set z-order to ensure it's below WebView (which has z-order 10000)
+        // Set z-order to ensure it's below everything (very low z-order)
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-            videoSurfaceView.setZ(1000f);
-            videoSurfaceView.setElevation(100f);
+            videoSurfaceView.setZ(0f);  // Lowest possible z-order
+            videoSurfaceView.setElevation(0f);
         }
         
-        // Add SurfaceView to root view at index 0 (background, below WebView)
-        rootView.addView(videoSurfaceView, 0);
+        // Find ContentFrameLayout (which contains CoordinatorLayout with WebView)
+        // We want to add SurfaceView BEFORE ContentFrameLayout in decorView
+        android.view.ViewGroup contentFrameLayout = null;
+        for (int i = 0; i < decorView.getChildCount(); i++) {
+            android.view.View child = decorView.getChildAt(i);
+            if (child.getClass().getName().contains("ContentFrameLayout") || 
+                child.getClass().getName().contains("FrameLayout")) {
+                contentFrameLayout = (android.view.ViewGroup) child;
+                break;
+            }
+        }
+        
+        if (contentFrameLayout != null) {
+            // Add SurfaceView to decorView BEFORE ContentFrameLayout
+            int contentIndex = decorView.indexOfChild(contentFrameLayout);
+            decorView.addView(videoSurfaceView, contentIndex);
+            android.util.Log.d("ExoPlayerSignage", "✅ Added SurfaceView to decorView at index " + contentIndex + " (before ContentFrameLayout)");
+        } else {
+            // Fallback: add to decorView at index 0
+            decorView.addView(videoSurfaceView, 0);
+            android.util.Log.d("ExoPlayerSignage", "✅ Added SurfaceView to decorView at index 0 (ContentFrameLayout not found)");
+        }
         
         // Log view hierarchy for debugging
-        android.util.Log.d("ExoPlayerSignage", "✅ Created SurfaceView and added to rootView at index 0");
-        android.util.Log.d("ExoPlayerSignage", "RootView child count: " + rootView.getChildCount());
-        for (int i = 0; i < rootView.getChildCount(); i++) {
-            android.view.View child = rootView.getChildAt(i);
-            android.util.Log.d("ExoPlayerSignage", "  Child " + i + ": " + child.getClass().getName() + 
+        android.util.Log.d("ExoPlayerSignage", "✅ Created SurfaceView and added to decorView");
+        android.util.Log.d("ExoPlayerSignage", "DecorView child count: " + decorView.getChildCount());
+        for (int i = 0; i < decorView.getChildCount(); i++) {
+            android.view.View child = decorView.getChildAt(i);
+            android.util.Log.d("ExoPlayerSignage", "  DecorView Child " + i + ": " + child.getClass().getName() + 
                 " (visibility: " + (child.getVisibility() == android.view.View.VISIBLE ? "VISIBLE" : 
                 child.getVisibility() == android.view.View.INVISIBLE ? "INVISIBLE" : "GONE") + ")");
+            if (child == videoSurfaceView) {
+                android.util.Log.d("ExoPlayerSignage", "    ✅ This is our SurfaceView");
+            }
         }
         
         // Initially hidden - visibility will be controlled by the app
