@@ -329,6 +329,8 @@ public class ExoPlayerSignagePlugin extends Plugin {
                 // This ensures the SurfaceView is ready when the player prepares
                 if ("video".equals(instance.type) && instance.surfaceView != null) {
                     player.setVideoSurfaceView(instance.surfaceView);
+                    // Make SurfaceView visible when playing video
+                    instance.surfaceView.setVisibility(android.view.View.VISIBLE);
                 }
                 
                 player.prepare();
@@ -442,6 +444,31 @@ public class ExoPlayerSignagePlugin extends Plugin {
                 call.resolve();
             } catch (Exception e) {
                 call.reject("Error setting volume: " + e.getMessage(), e);
+            }
+        });
+    }
+
+    @PluginMethod
+    public void setVideoSurfaceVisibility(PluginCall call) {
+        Boolean visibleValue = call.getBoolean("visible", true);
+        boolean visible = visibleValue != null ? visibleValue : true;
+        
+        android.app.Activity activity = getBridge().getActivity();
+        if (activity == null) {
+            call.reject("Activity not available");
+            return;
+        }
+        
+        activity.runOnUiThread(() -> {
+            try {
+                if (videoSurfaceView != null) {
+                    videoSurfaceView.setVisibility(visible ? android.view.View.VISIBLE : android.view.View.INVISIBLE);
+                    call.resolve();
+                } else {
+                    call.reject("Video SurfaceView not created yet");
+                }
+            } catch (Exception e) {
+                call.reject("Error setting SurfaceView visibility: " + e.getMessage(), e);
             }
         });
     }
