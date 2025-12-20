@@ -983,10 +983,22 @@ public class ExoPlayerSignagePlugin extends Plugin {
                 // Pause playback
                 if (instance.player != null) {
                     instance.player.pause();
+                    android.util.Log.d("ExoPlayerSignage", "⏸️ Player paused in hide()");
                 }
                 
-                // Visibility is controlled by the app, not by the plugin
-                // Don't modify SurfaceView visibility here
+                // For video players, hide the SurfaceView to prevent frozen frame from showing
+                // This is necessary when modal is shown - SurfaceView should be invisible
+                if ("video".equals(instance.type) && instance.surfaceView != null) {
+                    instance.surfaceView.setVisibility(android.view.View.INVISIBLE);
+                    android.util.Log.d("ExoPlayerSignage", "👁️ SurfaceView set to INVISIBLE in hide()");
+                }
+                
+                // Also hide the shared SurfaceView if it exists (for cases where player was released but SurfaceView remains)
+                if (videoSurfaceView != null) {
+                    videoSurfaceView.setVisibility(android.view.View.INVISIBLE);
+                    android.util.Log.d("ExoPlayerSignage", "👁️ Shared SurfaceView set to INVISIBLE in hide()");
+                }
+                
                 // Audio players should NEVER have a SurfaceView
                 
                 call.resolve();
