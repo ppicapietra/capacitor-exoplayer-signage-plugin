@@ -208,19 +208,37 @@ public class ExoPlayerSignagePlugin extends Plugin {
         // This ensures it's below everything else (WebView, LinearLayout, etc.)
         decorView.addView(videoSurfaceView, 0);
         
-        // IMPORTANT: Try to make LinearLayout background transparent so SurfaceView is visible
-        // Find LinearLayout and make its background transparent if it has one
+        // IMPORTANT: Try to make LinearLayout and its children (especially FrameLayout with WebView) transparent
+        // so SurfaceView is visible
         for (int i = 0; i < decorView.getChildCount(); i++) {
             android.view.View child = decorView.getChildAt(i);
             if (child != videoSurfaceView && child.getClass().getName().contains("LinearLayout")) {
                 android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: Found LinearLayout at index " + i);
                 if (child.getBackground() != null) {
                     android.util.Log.w("ExoPlayerSignage", "⚠️ LinearLayout has background - attempting to make transparent");
-                    // Try to make background transparent
                     child.setBackgroundColor(android.graphics.Color.TRANSPARENT);
                     android.util.Log.d("ExoPlayerSignage", "✅ Set LinearLayout background to TRANSPARENT");
                 } else {
                     android.util.Log.d("ExoPlayerSignage", "✅ LinearLayout already has no background (transparent)");
+                }
+                
+                // Also make FrameLayout children transparent (this contains the WebView)
+                if (child instanceof ViewGroup) {
+                    ViewGroup linearLayout = (ViewGroup) child;
+                    for (int j = 0; j < linearLayout.getChildCount(); j++) {
+                        android.view.View grandchild = linearLayout.getChildAt(j);
+                        if (grandchild instanceof ViewGroup) {
+                            ViewGroup frameLayout = (ViewGroup) grandchild;
+                            android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: Found ViewGroup child in LinearLayout: " + frameLayout.getClass().getName());
+                            if (frameLayout.getBackground() != null) {
+                                android.util.Log.w("ExoPlayerSignage", "⚠️ FrameLayout has background - attempting to make transparent");
+                                frameLayout.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+                                android.util.Log.d("ExoPlayerSignage", "✅ Set FrameLayout background to TRANSPARENT");
+                            } else {
+                                android.util.Log.d("ExoPlayerSignage", "✅ FrameLayout already has no background (transparent)");
+                            }
+                        }
+                    }
                 }
                 break;
             }
@@ -264,8 +282,43 @@ public class ExoPlayerSignagePlugin extends Plugin {
                 for (int j = 0; j < Math.min(vg.getChildCount(), 5); j++) { // Limit to first 5 children
                     android.view.View grandchild = vg.getChildAt(j);
                     android.util.Log.d("ExoPlayerSignage", "      Grandchild " + j + ": " + grandchild.getClass().getName());
+                    android.util.Log.d("ExoPlayerSignage", "        Dimensions: " + grandchild.getWidth() + "x" + grandchild.getHeight());
+                    android.util.Log.d("ExoPlayerSignage", "        Visibility: " + 
+                        (grandchild.getVisibility() == android.view.View.VISIBLE ? "VISIBLE" : 
+                         grandchild.getVisibility() == android.view.View.INVISIBLE ? "INVISIBLE" : "GONE"));
                     if (grandchild.getBackground() != null) {
-                        android.util.Log.d("ExoPlayerSignage", "        Has background");
+                        android.util.Log.d("ExoPlayerSignage", "        ⚠️ Has background: " + grandchild.getBackground().getClass().getName());
+                        // Try to make it transparent if it's a FrameLayout (contains WebView)
+                        if (grandchild.getClass().getName().contains("FrameLayout")) {
+                            android.util.Log.w("ExoPlayerSignage", "        🔧 Making FrameLayout background transparent");
+                            grandchild.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+                        }
+                    } else {
+                        android.util.Log.d("ExoPlayerSignage", "        ✅ No background (transparent)");
+                    }
+                    
+                    // If it's a WebView, try to make it transparent
+                    if (grandchild.getClass().getName().contains("WebView")) {
+                        android.util.Log.d("ExoPlayerSignage", "        🌐 Found WebView!");
+                        try {
+                            // Try to set WebView background transparent
+                            grandchild.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+                            android.util.Log.d("ExoPlayerSignage", "        ✅ Set WebView background to TRANSPARENT");
+                            
+                            // Also try to set alpha to make it semi-transparent (but this might affect content)
+                            // Actually, don't do this as it will make HTML content transparent too
+                            // grandchild.setAlpha(0.5f);
+                        } catch (Exception e) {
+                            android.util.Log.w("ExoPlayerSignage", "        ⚠️ Could not set WebView background: " + e.getMessage());
+                        }
+                    }
+                    
+                    // Check if this grandchild covers the entire screen (same dimensions as SurfaceView)
+                    if (grandchild.getWidth() > 0 && grandchild.getHeight() > 0 && 
+                        grandchild.getWidth() == videoSurfaceView.getWidth() && 
+                        grandchild.getHeight() == videoSurfaceView.getHeight()) {
+                        android.util.Log.w("ExoPlayerSignage", "        ⚠️ Grandchild " + j + " tiene las mismas dimensiones que SurfaceView (1280x720) - podría estar cubriéndolo!");
+                        android.util.Log.w("ExoPlayerSignage", "        ⚠️ Esto significa que el contenido HTML probablemente está cubriendo el video");
                     }
                 }
             }
