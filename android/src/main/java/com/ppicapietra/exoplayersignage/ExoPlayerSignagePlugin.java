@@ -47,12 +47,14 @@ public class ExoPlayerSignagePlugin extends Plugin {
         TextureView textureView; // Changed from TextureView to TextureView for better z-order integration
         String type; // "video" or "audio"
         String id;
+        Float zIndex; // Optional z-index for TextureView (null = use bringToFront())
         
-        PlayerInstance(ExoPlayer player, TextureView textureView, String type, String id) {
+        PlayerInstance(ExoPlayer player, TextureView textureView, String type, String id, Float zIndex) {
             this.player = player;
             this.textureView = textureView;
             this.type = type;
             this.id = id;
+            this.zIndex = zIndex;
         }
     }
     
@@ -143,6 +145,10 @@ public class ExoPlayerSignagePlugin extends Plugin {
             initialVolume = "audio".equals(type) ? 1.0f : 0.0f;
         }
         
+        // Get z-index (optional, null = use bringToFront() by default)
+        Double zIndexValue = call.getDouble("zIndex", null);
+        Float zIndex = zIndexValue != null ? zIndexValue.floatValue() : null;
+        
         android.app.Activity activity = getBridge().getActivity();
         if (activity == null) {
             call.reject("Activity not available");
@@ -199,7 +205,7 @@ public class ExoPlayerSignagePlugin extends Plugin {
                 player.setRepeatMode(ExoPlayer.REPEAT_MODE_OFF);
                 
                 // Store player instance
-                PlayerInstance instance = new PlayerInstance(player, textureView, type, playerId);
+                PlayerInstance instance = new PlayerInstance(player, textureView, type, playerId, zIndex);
                 players.put(playerId, instance);
                 
                 JSObject result = new JSObject();
@@ -282,12 +288,22 @@ public class ExoPlayerSignagePlugin extends Plugin {
                                 FrameLayout.LayoutParams.MATCH_PARENT
                             );
                             instance.textureView.setLayoutParams(params);
-                            // TextureView doesn't need z-order settings - it respects normal view hierarchy
                             
                             // Add TextureView to root view
                             ViewGroup rootView = (ViewGroup) activity.findViewById(android.R.id.content);
                             if (rootView != null) {
                                 rootView.addView(instance.textureView);
+                                
+                                // Apply z-index if defined, otherwise use bringToFront()
+                                if (instance.zIndex != null) {
+                                    // Use setZ() for API 21+ (Android 5.0+)
+                                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+                                        instance.textureView.setZ(instance.zIndex);
+                                    }
+                                } else {
+                                    // Default behavior: bring to front
+                                    instance.textureView.bringToFront();
+                                }
                             }
                         } else {
                             // TextureView exists but might not be in layout - re-add if needed
@@ -296,6 +312,25 @@ public class ExoPlayerSignagePlugin extends Plugin {
                                 ViewGroup rootView = (ViewGroup) activity.findViewById(android.R.id.content);
                                 if (rootView != null) {
                                     rootView.addView(instance.textureView);
+                                    
+                                    // Apply z-index if defined, otherwise use bringToFront()
+                                    if (instance.zIndex != null) {
+                                        // Use setZ() for API 21+ (Android 5.0+)
+                                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+                                            instance.textureView.setZ(instance.zIndex);
+                                        }
+                                    } else {
+                                        // Default behavior: bring to front
+                                        instance.textureView.bringToFront();
+                                    }
+                                }
+                            } else {
+                                // TextureView is already in layout - apply z-index if defined
+                                if (instance.zIndex != null) {
+                                    // Use setZ() for API 21+ (Android 5.0+)
+                                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+                                        instance.textureView.setZ(instance.zIndex);
+                                    }
                                 }
                             }
                         }
@@ -680,12 +715,22 @@ public class ExoPlayerSignagePlugin extends Plugin {
                                 FrameLayout.LayoutParams.MATCH_PARENT
                             );
                             instance.textureView.setLayoutParams(params);
-                            // TextureView doesn't need z-order settings - it respects normal view hierarchy
                             
                             // Add TextureView to root view
                             ViewGroup rootView = (ViewGroup) activity.findViewById(android.R.id.content);
                             if (rootView != null) {
                                 rootView.addView(instance.textureView);
+                                
+                                // Apply z-index if defined, otherwise use bringToFront()
+                                if (instance.zIndex != null) {
+                                    // Use setZ() for API 21+ (Android 5.0+)
+                                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+                                        instance.textureView.setZ(instance.zIndex);
+                                    }
+                                } else {
+                                    // Default behavior: bring to front
+                                    instance.textureView.bringToFront();
+                                }
                             }
                         } else {
                             // TextureView exists but might not be in layout - re-add if needed
@@ -694,6 +739,25 @@ public class ExoPlayerSignagePlugin extends Plugin {
                                 ViewGroup rootView = (ViewGroup) activity.findViewById(android.R.id.content);
                                 if (rootView != null) {
                                     rootView.addView(instance.textureView);
+                                    
+                                    // Apply z-index if defined, otherwise use bringToFront()
+                                    if (instance.zIndex != null) {
+                                        // Use setZ() for API 21+ (Android 5.0+)
+                                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+                                            instance.textureView.setZ(instance.zIndex);
+                                        }
+                                    } else {
+                                        // Default behavior: bring to front
+                                        instance.textureView.bringToFront();
+                                    }
+                                }
+                            } else {
+                                // TextureView is already in layout - apply z-index if defined
+                                if (instance.zIndex != null) {
+                                    // Use setZ() for API 21+ (Android 5.0+)
+                                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+                                        instance.textureView.setZ(instance.zIndex);
+                                    }
                                 }
                             }
                         }
