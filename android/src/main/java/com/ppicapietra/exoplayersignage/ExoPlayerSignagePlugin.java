@@ -204,17 +204,72 @@ public class ExoPlayerSignagePlugin extends Plugin {
             }
         });
         
-        // DO NOT set z-order or elevation - SurfaceView should be at the bottom layer
-        // It will be below WebView naturally because it's added first to DecorView
-        
         // Add SurfaceView directly to DecorView at index 0 (background layer)
         // This ensures it's below everything else (WebView, LinearLayout, etc.)
         decorView.addView(videoSurfaceView, 0);
+        
+        // IMPORTANT: Try to make LinearLayout background transparent so SurfaceView is visible
+        // Find LinearLayout and make its background transparent if it has one
+        for (int i = 0; i < decorView.getChildCount(); i++) {
+            android.view.View child = decorView.getChildAt(i);
+            if (child != videoSurfaceView && child.getClass().getName().contains("LinearLayout")) {
+                android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: Found LinearLayout at index " + i);
+                if (child.getBackground() != null) {
+                    android.util.Log.w("ExoPlayerSignage", "⚠️ LinearLayout has background - attempting to make transparent");
+                    // Try to make background transparent
+                    child.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+                    android.util.Log.d("ExoPlayerSignage", "✅ Set LinearLayout background to TRANSPARENT");
+                } else {
+                    android.util.Log.d("ExoPlayerSignage", "✅ LinearLayout already has no background (transparent)");
+                }
+                break;
+            }
+        }
+        
+        // Set SurfaceView z-order to ensure it's visible
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+            videoSurfaceView.setZ(0f);
+            videoSurfaceView.setElevation(0f);
+            android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: Set SurfaceView z-order to 0, elevation to 0");
+        }
         android.util.Log.d("ExoPlayerSignage", "✅ Added SurfaceView to DecorView at index 0 (background layer)");
         android.util.Log.d("ExoPlayerSignage", "📊 DEBUG: DecorView child count after adding SurfaceView: " + decorView.getChildCount());
         android.util.Log.d("ExoPlayerSignage", "📏 DEBUG: SurfaceView dimensions after adding: " + 
             videoSurfaceView.getWidth() + "x" + videoSurfaceView.getHeight());
         android.util.Log.d("ExoPlayerSignage", "👁️ DEBUG: SurfaceView isShown after adding: " + videoSurfaceView.isShown());
+        
+        // Log all children of DecorView to understand the view hierarchy
+        android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: Analyzing DecorView children:");
+        for (int i = 0; i < decorView.getChildCount(); i++) {
+            android.view.View child = decorView.getChildAt(i);
+            android.util.Log.d("ExoPlayerSignage", "  Child " + i + ": " + child.getClass().getName());
+            android.util.Log.d("ExoPlayerSignage", "    Visibility: " + 
+                (child.getVisibility() == android.view.View.VISIBLE ? "VISIBLE" : 
+                 child.getVisibility() == android.view.View.INVISIBLE ? "INVISIBLE" : "GONE"));
+            android.util.Log.d("ExoPlayerSignage", "    Dimensions: " + child.getWidth() + "x" + child.getHeight());
+            android.util.Log.d("ExoPlayerSignage", "    Alpha: " + child.getAlpha());
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+                android.util.Log.d("ExoPlayerSignage", "    Z-order: " + child.getZ() + ", Elevation: " + child.getElevation());
+            }
+            if (child.getBackground() != null) {
+                android.util.Log.d("ExoPlayerSignage", "    Has background: " + child.getBackground().getClass().getName());
+            } else {
+                android.util.Log.d("ExoPlayerSignage", "    No background (transparent)");
+            }
+            
+            // If it's a ViewGroup, check its children too
+            if (child instanceof ViewGroup) {
+                ViewGroup vg = (ViewGroup) child;
+                android.util.Log.d("ExoPlayerSignage", "    Is ViewGroup with " + vg.getChildCount() + " children");
+                for (int j = 0; j < Math.min(vg.getChildCount(), 5); j++) { // Limit to first 5 children
+                    android.view.View grandchild = vg.getChildAt(j);
+                    android.util.Log.d("ExoPlayerSignage", "      Grandchild " + j + ": " + grandchild.getClass().getName());
+                    if (grandchild.getBackground() != null) {
+                        android.util.Log.d("ExoPlayerSignage", "        Has background");
+                    }
+                }
+            }
+        }
         
         // Log view hierarchy for debugging
         ViewGroup parent = (ViewGroup) videoSurfaceView.getParent();
@@ -244,6 +299,35 @@ public class ExoPlayerSignagePlugin extends Plugin {
                     child.getVisibility() == android.view.View.INVISIBLE ? "INVISIBLE" : "GONE") + ")" + zInfo);
                 if (child == videoSurfaceView) {
                     android.util.Log.d("ExoPlayerSignage", "    ✅ This is our SurfaceView");
+                } else {
+                    // Check if this child has an opaque background that might cover SurfaceView
+                    if (child.getBackground() != null) {
+                        android.graphics.drawable.Drawable bg = child.getBackground();
+                        android.util.Log.d("ExoPlayerSignage", "    ⚠️ Child " + i + " has background: " + bg.getClass().getName());
+                        if (bg instanceof android.graphics.drawable.ColorDrawable) {
+                            android.graphics.drawable.ColorDrawable colorBg = (android.graphics.drawable.ColorDrawable) bg;
+                            int color = colorBg.getColor();
+                            int alpha = (color >> 24) & 0xFF;
+                            android.util.Log.d("ExoPlayerSignage", "    ⚠️ Background color alpha: " + alpha + " (255 = fully opaque, 0 = transparent)");
+                            if (alpha == 255) {
+                                android.util.Log.w("ExoPlayerSignage", "    ❌ PROBLEMA: Child " + i + " tiene fondo completamente opaco que cubre el SurfaceView!");
+                            }
+                        }
+                    } else {
+                        android.util.Log.d("ExoPlayerSignage", "    ✅ Child " + i + " no tiene fondo (transparente)");
+                    }
+                    
+                    // If it's a ViewGroup, check if it covers the entire screen
+                    if (child instanceof ViewGroup) {
+                        ViewGroup vg = (ViewGroup) child;
+                        android.util.Log.d("ExoPlayerSignage", "    Child " + i + " es ViewGroup con " + vg.getChildCount() + " hijos");
+                        android.util.Log.d("ExoPlayerSignage", "    Dimensiones: " + vg.getWidth() + "x" + vg.getHeight());
+                        if (vg.getWidth() > 0 && vg.getHeight() > 0 && 
+                            vg.getWidth() == videoSurfaceView.getWidth() && 
+                            vg.getHeight() == videoSurfaceView.getHeight()) {
+                            android.util.Log.w("ExoPlayerSignage", "    ⚠️ Child " + i + " tiene las mismas dimensiones que SurfaceView - podría estar cubriéndolo!");
+                        }
+                    }
                 }
             }
         }
