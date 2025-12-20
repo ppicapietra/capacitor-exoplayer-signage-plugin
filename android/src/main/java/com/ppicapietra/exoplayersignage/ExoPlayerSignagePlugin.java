@@ -101,8 +101,8 @@ public class ExoPlayerSignagePlugin extends Plugin {
         );
         videoSurfaceView.setLayoutParams(params);
         
-        // Set background color to black (will show if video doesn't render)
-        videoSurfaceView.setBackgroundColor(android.graphics.Color.BLACK);
+        // Set background color to transparent
+        videoSurfaceView.setBackgroundColor(android.graphics.Color.TRANSPARENT);
         
         // Set up SurfaceHolder callback to ensure SurfaceView is ready before associating with player
         videoSurfaceView.getHolder().addCallback(new android.view.SurfaceHolder.Callback() {
@@ -113,6 +113,9 @@ public class ExoPlayerSignagePlugin extends Plugin {
                 if (pendingPlayer != null) {
                     android.util.Log.d("ExoPlayerSignage", "🎬 Associating pending player with SurfaceView");
                     pendingPlayer.setVideoSurfaceView(videoSurfaceView);
+                    // Ensure SurfaceView is visible when player is associated
+                    videoSurfaceView.setVisibility(android.view.View.VISIBLE);
+                    android.util.Log.d("ExoPlayerSignage", "✅ SurfaceView visibility set to VISIBLE (player associated)");
                     pendingPlayer = null; // Clear pending player
                 }
             }
@@ -120,6 +123,22 @@ public class ExoPlayerSignagePlugin extends Plugin {
             @Override
             public void surfaceChanged(android.view.SurfaceHolder holder, int format, int width, int height) {
                 android.util.Log.d("ExoPlayerSignage", "SurfaceHolder changed: " + width + "x" + height);
+                // Ensure SurfaceView is visible if there's a player associated with it
+                // Check if any video player is currently playing
+                for (PlayerInstance instance : players.values()) {
+                    if ("video".equals(instance.type) && instance.surfaceView == videoSurfaceView) {
+                        ExoPlayer player = instance.player;
+                        if (player != null && player.getPlaybackState() != Player.STATE_IDLE && 
+                            player.getPlaybackState() != Player.STATE_ENDED) {
+                            // Player is playing or buffering - ensure SurfaceView is visible
+                            if (videoSurfaceView.getVisibility() != android.view.View.VISIBLE) {
+                                videoSurfaceView.setVisibility(android.view.View.VISIBLE);
+                                android.util.Log.d("ExoPlayerSignage", "✅ SurfaceView visibility set to VISIBLE (player is playing)");
+                            }
+                            break;
+                        }
+                    }
+                }
             }
             
             @Override
