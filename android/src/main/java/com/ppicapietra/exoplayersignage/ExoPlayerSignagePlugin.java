@@ -101,45 +101,68 @@ public class ExoPlayerSignagePlugin extends Plugin {
         // Set background color to black (will show if video doesn't render)
         videoSurfaceView.setBackgroundColor(android.graphics.Color.BLACK);
         
-        // Set z-order to ensure it's below everything (very low z-order)
+        // Set z-order to ensure it's below WebView (which has z-order 10000)
+        // SurfaceView should be below WebView but above background
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-            videoSurfaceView.setZ(0f);  // Lowest possible z-order
-            videoSurfaceView.setElevation(0f);
+            videoSurfaceView.setZ(1000f);  // Below WebView (10000) but visible
+            videoSurfaceView.setElevation(100f);
         }
         
-        // Find ContentFrameLayout (which contains CoordinatorLayout with WebView)
-        // We want to add SurfaceView BEFORE ContentFrameLayout in decorView
-        android.view.ViewGroup contentFrameLayout = null;
+        // Find LinearLayout (which contains ContentFrameLayout with WebView)
+        // We want to add SurfaceView INSIDE LinearLayout at index 0, so it's below WebView but visible
+        android.view.ViewGroup linearLayout = null;
         for (int i = 0; i < decorView.getChildCount(); i++) {
             android.view.View child = decorView.getChildAt(i);
-            if (child.getClass().getName().contains("ContentFrameLayout") || 
-                child.getClass().getName().contains("FrameLayout")) {
-                contentFrameLayout = (android.view.ViewGroup) child;
+            if (child.getClass().getName().contains("LinearLayout")) {
+                linearLayout = (android.view.ViewGroup) child;
                 break;
             }
         }
         
-        if (contentFrameLayout != null) {
-            // Add SurfaceView to decorView BEFORE ContentFrameLayout
-            int contentIndex = decorView.indexOfChild(contentFrameLayout);
-            decorView.addView(videoSurfaceView, contentIndex);
-            android.util.Log.d("ExoPlayerSignage", "✅ Added SurfaceView to decorView at index " + contentIndex + " (before ContentFrameLayout)");
+        if (linearLayout != null) {
+            // Add SurfaceView INSIDE LinearLayout at index 0 (lowest, below WebView)
+            linearLayout.addView(videoSurfaceView, 0);
+            android.util.Log.d("ExoPlayerSignage", "✅ Added SurfaceView INSIDE LinearLayout at index 0 (below WebView)");
         } else {
-            // Fallback: add to decorView at index 0
-            decorView.addView(videoSurfaceView, 0);
-            android.util.Log.d("ExoPlayerSignage", "✅ Added SurfaceView to decorView at index 0 (ContentFrameLayout not found)");
+            // Fallback: try to find ContentFrameLayout
+            android.view.ViewGroup contentFrameLayout = null;
+            for (int i = 0; i < decorView.getChildCount(); i++) {
+                android.view.View child = decorView.getChildAt(i);
+                if (child.getClass().getName().contains("ContentFrameLayout") || 
+                    child.getClass().getName().contains("FrameLayout")) {
+                    contentFrameLayout = (android.view.ViewGroup) child;
+                    break;
+                }
+            }
+            
+            if (contentFrameLayout != null) {
+                // Add SurfaceView INSIDE ContentFrameLayout at index 0
+                contentFrameLayout.addView(videoSurfaceView, 0);
+                android.util.Log.d("ExoPlayerSignage", "✅ Added SurfaceView INSIDE ContentFrameLayout at index 0");
+            } else {
+                // Last resort: add to decorView at index 0
+                decorView.addView(videoSurfaceView, 0);
+                android.util.Log.d("ExoPlayerSignage", "⚠️ Added SurfaceView to decorView at index 0 (LinearLayout/ContentFrameLayout not found)");
+            }
         }
         
         // Log view hierarchy for debugging
-        android.util.Log.d("ExoPlayerSignage", "✅ Created SurfaceView and added to decorView");
-        android.util.Log.d("ExoPlayerSignage", "DecorView child count: " + decorView.getChildCount());
-        for (int i = 0; i < decorView.getChildCount(); i++) {
-            android.view.View child = decorView.getChildAt(i);
-            android.util.Log.d("ExoPlayerSignage", "  DecorView Child " + i + ": " + child.getClass().getName() + 
-                " (visibility: " + (child.getVisibility() == android.view.View.VISIBLE ? "VISIBLE" : 
-                child.getVisibility() == android.view.View.INVISIBLE ? "INVISIBLE" : "GONE") + ")");
-            if (child == videoSurfaceView) {
-                android.util.Log.d("ExoPlayerSignage", "    ✅ This is our SurfaceView");
+        ViewGroup parent = (ViewGroup) videoSurfaceView.getParent();
+        if (parent != null) {
+            android.util.Log.d("ExoPlayerSignage", "✅ Created SurfaceView and added to: " + parent.getClass().getName());
+            android.util.Log.d("ExoPlayerSignage", "Parent child count: " + parent.getChildCount());
+            for (int i = 0; i < parent.getChildCount(); i++) {
+                android.view.View child = parent.getChildAt(i);
+                String zInfo = "";
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+                    zInfo = " (z: " + child.getZ() + ", elevation: " + child.getElevation() + ")";
+                }
+                android.util.Log.d("ExoPlayerSignage", "  Parent Child " + i + ": " + child.getClass().getName() + 
+                    " (visibility: " + (child.getVisibility() == android.view.View.VISIBLE ? "VISIBLE" : 
+                    child.getVisibility() == android.view.View.INVISIBLE ? "INVISIBLE" : "GONE") + ")" + zInfo);
+                if (child == videoSurfaceView) {
+                    android.util.Log.d("ExoPlayerSignage", "    ✅ This is our SurfaceView");
+                }
             }
         }
         
@@ -394,14 +417,30 @@ public class ExoPlayerSignagePlugin extends Plugin {
                     if (parent != null) {
                         android.util.Log.d("ExoPlayerSignage", "✅ SurfaceView parent verified: " + parent.getClass().getName());
                         android.util.Log.d("ExoPlayerSignage", "Parent child count: " + parent.getChildCount());
+                        
+                        // Get SurfaceView z-order
+                        float surfaceZ = 0f;
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+                            surfaceZ = instance.surfaceView.getZ();
+                        }
+                        android.util.Log.d("ExoPlayerSignage", "SurfaceView z-order: " + surfaceZ);
+                        
                         for (int i = 0; i < parent.getChildCount(); i++) {
                             android.view.View child = parent.getChildAt(i);
                             if (child == instance.surfaceView) {
                                 android.util.Log.d("ExoPlayerSignage", "  ✅ Found SurfaceView at index " + i);
                             } else {
+                                String zInfo = "";
+                                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+                                    float childZ = child.getZ();
+                                    zInfo = " (z: " + childZ + ", elevation: " + child.getElevation() + ")";
+                                    if (childZ > surfaceZ) {
+                                        zInfo += " ⚠️ ABOVE SurfaceView!";
+                                    }
+                                }
                                 android.util.Log.d("ExoPlayerSignage", "  Child " + i + ": " + child.getClass().getName() + 
                                     " (visibility: " + (child.getVisibility() == android.view.View.VISIBLE ? "VISIBLE" : 
-                                    child.getVisibility() == android.view.View.INVISIBLE ? "INVISIBLE" : "GONE") + ")");
+                                    child.getVisibility() == android.view.View.INVISIBLE ? "INVISIBLE" : "GONE") + ")" + zInfo);
                             }
                         }
                     } else {
