@@ -135,14 +135,15 @@ public class ExoPlayerSignagePlugin extends Plugin {
         );
         videoContainer.setLayoutParams(params);
         
-        // Set z-order to 1000 (low, below WebView which should be 10000+)
-        // This ensures videos stay below the modal HTML content
+        // Set z-order to 1000 (low, below WebView)
+        // NOTE: The WebView should have its z-order set in MainActivity.java to ensure
+        // it stays above this container. This plugin only manages its own container's z-order.
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
             videoContainer.setZ(1000f);
         }
         
-        // Add container to root view (at the beginning to ensure it's below WebView)
-        // Inserting at index 0 ensures it's below other views added later
+        // Add container to root view at the BEGINNING (index 0) to ensure it's below WebView
+        // The WebView should already be in the hierarchy with a higher z-order set in MainActivity
         rootView.addView(videoContainer, 0);
         
         // Initially hidden - will be shown when videos are added
@@ -150,6 +151,7 @@ public class ExoPlayerSignagePlugin extends Plugin {
         
         return videoContainer;
     }
+    
 
     private long getSafeCacheSize() {
         File cacheDir = getContext().getCacheDir();
@@ -659,37 +661,33 @@ public class ExoPlayerSignagePlugin extends Plugin {
                     return;
                 }
                 
-                // Remove TextureView from layout to ensure it doesn't block modals/images (video only)
+                // Hide TextureView without removing it from layout (video only)
+                // This allows it to be shown again later without recreation
                 if (instance.textureView != null) {
-                    // Clear video texture first (before removing from view)
+                    // Pause and clear video texture to stop rendering
                     if (instance.player != null) {
                         try {
+                            instance.player.pause();
                             instance.player.clearVideoTextureView(instance.textureView);
                         } catch (Exception e) {
                             // Ignore errors when clearing texture
                         }
                     }
-                    // Set visibility to GONE first to stop rendering
+                    // Set visibility to GONE to hide it (but keep it in the container)
+                    // This ensures it stays in the container with correct z-order
                     instance.textureView.setVisibility(android.view.View.GONE);
-                    // Remove from view hierarchy (should be in videoContainer)
-                    ViewGroup parent = (ViewGroup) instance.textureView.getParent();
-                    if (parent != null) {
-                        try {
-                            parent.removeView(instance.textureView);
-                            // Hide container if empty
-                            if (parent == videoContainer && videoContainer.getChildCount() == 0) {
-                                videoContainer.setVisibility(android.view.View.GONE);
-                            }
-                        } catch (Exception e) {
-                            // Ignore errors when removing view
-                        }
+                    
+                    // Hide the container itself (but keep TextureView inside for later restoration)
+                    if (videoContainer != null) {
+                        videoContainer.setVisibility(android.view.View.GONE);
                     }
-                    // CRITICAL: Set to null to ensure it's completely removed
-                    // We'll recreate it when needed in play() or show()
-                    instance.textureView = null;
+                    
+                    // DO NOT remove TextureView from parent
+                    // DO NOT set instance.textureView = null
+                    // This allows show() to restore it quickly without recreation
                 }
                 
-                // Also remove any orphaned TextureViews from the root view
+                // Also remove any orphaned TextureViews from the root view (cleanup)
                 removeAllTextureViewsFromRoot();
                 
                 call.resolve();
@@ -757,7 +755,7 @@ public class ExoPlayerSignagePlugin extends Plugin {
                         // Get or create video container
                         FrameLayout container = getOrCreateVideoContainer();
                         
-                        // Recreate TextureView if it was removed
+                        // Recreate TextureView only if it was completely removed (null)
                         if (instance.textureView == null) {
                             instance.textureView = new TextureView(getContext());
                             FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
@@ -772,16 +770,16 @@ public class ExoPlayerSignagePlugin extends Plugin {
                                 container.setVisibility(android.view.View.VISIBLE);
                             }
                         } else {
-                            // TextureView exists but might not be in layout - re-add if needed
+                            // TextureView exists - check if it's in the correct container
                             ViewGroup parent = (ViewGroup) instance.textureView.getParent();
                             if (parent == null) {
-                                // Add to container if not already in layout
+                                // TextureView was removed from parent - re-add to container
                                 if (container != null) {
                                     container.addView(instance.textureView);
                                     container.setVisibility(android.view.View.VISIBLE);
                                 }
                             } else if (parent != container) {
-                                // TextureView is in wrong parent - move to container
+                                // TextureView is in wrong parent (e.g., root view) - move to container
                                 try {
                                     parent.removeView(instance.textureView);
                                 } catch (Exception e) {
@@ -791,11 +789,22 @@ public class ExoPlayerSignagePlugin extends Plugin {
                                     container.addView(instance.textureView);
                                     container.setVisibility(android.view.View.VISIBLE);
                                 }
+                            } else {
+                                // TextureView is already in correct container - just show container
+                                if (container != null) {
+                                    container.setVisibility(android.view.View.VISIBLE);
+                                }
                             }
                         }
                         
+                        // Show TextureView and associate with player
                         instance.textureView.setVisibility(android.view.View.VISIBLE);
                         instance.player.setVideoTextureView(instance.textureView);
+                        
+                        // Resume playback if it was paused
+                        if (!instance.player.isPlaying()) {
+                            instance.player.play();
+                        }
                     } else {
                         // Player is not playing - ensure TextureView is removed
                         if (instance.textureView != null) {
