@@ -101,9 +101,10 @@ public class ExoPlayerSignagePlugin extends Plugin {
         );
         videoSurfaceView.setLayoutParams(params);
         
-        // Set background color to MAGENTA for debugging (to visually detect SurfaceView)
-        videoSurfaceView.setBackgroundColor(android.graphics.Color.MAGENTA);
-        android.util.Log.d("ExoPlayerSignage", "🎨 DEBUG: SurfaceView background set to MAGENTA for visual debugging");
+        // Set background color to TRANSPARENT so video content is visible
+        // Note: SurfaceView background is drawn ABOVE the Surface content, so it must be transparent
+        videoSurfaceView.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+        android.util.Log.d("ExoPlayerSignage", "🎨 DEBUG: SurfaceView background set to TRANSPARENT (video will be visible)");
         
         // Set up SurfaceHolder callback to ensure SurfaceView is ready before associating with player
         videoSurfaceView.getHolder().addCallback(new android.view.SurfaceHolder.Callback() {
