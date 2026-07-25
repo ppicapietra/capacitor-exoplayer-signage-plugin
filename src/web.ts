@@ -43,6 +43,22 @@ export class ExoPlayerSignageWeb extends WebPlugin implements ExoPlayerSignagePl
     throw this.unimplemented('releasePlayer() no está implementado en web.');
   }
 
+  async setVideoBounds(_options: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    resizeMode?: 'fill' | 'fit';
+  }): Promise<void> {
+    console.warn('ExoPlayerSignage: setVideoBounds() no está disponible en web.');
+    throw this.unimplemented('setVideoBounds() no está implementado en web.');
+  }
+
+  async setVideoSurfaceVisibility(_options: { visible: boolean }): Promise<void> {
+    console.warn('ExoPlayerSignage: setVideoSurfaceVisibility() no está disponible en web.');
+    throw this.unimplemented('setVideoSurfaceVisibility() no está implementado en web.');
+  }
+
   async addListener(_eventName: 'audioPlaybackEnded', _listenerFunc: (data: { playerId: string }) => void): Promise<any> {
     console.warn('ExoPlayerSignage: addListener() no está disponible en web.');
     throw this.unimplemented('addListener() no está implementado en web.');

@@ -47,6 +47,15 @@ public class ExoPlayerSignagePlugin extends Plugin {
     
     // Pending player to associate with SurfaceView when SurfaceHolder is ready
     private ExoPlayer pendingPlayer;
+
+    // Normalized bounds (0..1) relative to the WebView viewport. Default = fullscreen.
+    private float boundsX = 0f;
+    private float boundsY = 0f;
+    private float boundsWidth = 1f;
+    private float boundsHeight = 1f;
+    private String resizeMode = "fill"; // "fill" | "fit"
+    private int videoContentWidth = 0;
+    private int videoContentHeight = 0;
     
     // Helper class to manage a single player instance
     private static class PlayerInstance {
@@ -95,6 +104,7 @@ public class ExoPlayerSignagePlugin extends Plugin {
         // Create SurfaceView
         videoSurfaceView = new SurfaceView(getContext());
         
+        // Apply current bounds (default fullscreen fill) before attaching
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT,
             FrameLayout.LayoutParams.MATCH_PARENT
@@ -150,15 +160,8 @@ public class ExoPlayerSignagePlugin extends Plugin {
             @Override
             public void surfaceChanged(android.view.SurfaceHolder holder, int format, int width, int height) {
                 android.util.Log.d("ExoPlayerSignage", "SurfaceHolder changed: " + width + "x" + height);
-                android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: SurfaceHolder format: " + format);
-                android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: SurfaceView dimensions: " + 
-                    videoSurfaceView.getWidth() + "x" + videoSurfaceView.getHeight());
-                android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: SurfaceView visibility: " + 
-                    (videoSurfaceView.getVisibility() == android.view.View.VISIBLE ? "VISIBLE" : 
-                     videoSurfaceView.getVisibility() == android.view.View.INVISIBLE ? "INVISIBLE" : "GONE"));
-                android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: SurfaceView isShown: " + videoSurfaceView.isShown());
-                android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: SurfaceView parent: " + 
-                    (videoSurfaceView.getParent() != null ? videoSurfaceView.getParent().getClass().getName() : "null"));
+                // Re-apply bounds so layout survives window size changes
+                applyVideoBounds();
                 
                 // Ensure SurfaceView is visible if there's a player associated with it
                 // Check if any video player is currently playing
@@ -167,27 +170,13 @@ public class ExoPlayerSignagePlugin extends Plugin {
                     if ("video".equals(instance.type) && instance.surfaceView == videoSurfaceView) {
                         foundPlayer = true;
                         ExoPlayer player = instance.player;
-                        android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: Found video player instance: " + instance.id);
                         if (player != null) {
-                            android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: Player state: " + getPlaybackStateString(player.getPlaybackState()));
-                            android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: Player isPlaying: " + player.isPlaying());
-                            android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: Player currentPosition: " + player.getCurrentPosition() + "ms");
-                            android.util.Log.d("ExoPlayerSignage", "🔍 DEBUG: Player duration: " + player.getDuration() + "ms");
-                            
                             if (player.getPlaybackState() != Player.STATE_IDLE && 
                                 player.getPlaybackState() != Player.STATE_ENDED) {
-                                // Player is playing or buffering - ensure SurfaceView is visible
                                 if (videoSurfaceView.getVisibility() != android.view.View.VISIBLE) {
                                     videoSurfaceView.setVisibility(android.view.View.VISIBLE);
-                                    android.util.Log.d("ExoPlayerSignage", "✅ SurfaceView visibility set to VISIBLE (player is playing)");
-                                } else {
-                                    android.util.Log.d("ExoPlayerSignage", "✅ SurfaceView already VISIBLE");
                                 }
-                            } else {
-                                android.util.Log.d("ExoPlayerSignage", "⚠️ DEBUG: Player is IDLE or ENDED, not ensuring visibility");
                             }
-                        } else {
-                            android.util.Log.w("ExoPlayerSignage", "⚠️ DEBUG: Player instance has null player!");
                         }
                         break;
                     }
@@ -208,6 +197,7 @@ public class ExoPlayerSignagePlugin extends Plugin {
         // Add SurfaceView directly to DecorView at index 0 (background layer)
         // This ensures it's below everything else (WebView, LinearLayout, etc.)
         decorView.addView(videoSurfaceView, 0);
+        applyVideoBounds();
         
         // IMPORTANT: Try to make LinearLayout and its children (especially FrameLayout with WebView) transparent
         // so SurfaceView is visible
@@ -511,6 +501,18 @@ public class ExoPlayerSignagePlugin extends Plugin {
                             .setContentType(C.CONTENT_TYPE_MOVIE)
                             .build();
                     player.setAudioAttributes(audioAttributes, false);
+
+                    // Track video size for letterboxing when resizeMode is "fit"
+                    player.addListener(new Player.Listener() {
+                        @Override
+                        public void onVideoSizeChanged(com.google.android.exoplayer2.video.VideoSize videoSize) {
+                            videoContentWidth = videoSize.width;
+                            videoContentHeight = videoSize.height;
+                            if ("fit".equals(resizeMode)) {
+                                applyVideoBounds();
+                            }
+                        }
+                    });
                 } else {
                     // Audio player - no SurfaceView needed
                     // Configure AudioAttributes for audio
@@ -919,6 +921,36 @@ public class ExoPlayerSignagePlugin extends Plugin {
     }
 
     @PluginMethod
+    public void setVideoBounds(PluginCall call) {
+        Double xVal = call.getDouble("x", 0.0);
+        Double yVal = call.getDouble("y", 0.0);
+        Double wVal = call.getDouble("width", 1.0);
+        Double hVal = call.getDouble("height", 1.0);
+        String mode = call.getString("resizeMode", "fill");
+
+        boundsX = clamp01(xVal != null ? xVal.floatValue() : 0f);
+        boundsY = clamp01(yVal != null ? yVal.floatValue() : 0f);
+        boundsWidth = Math.max(0f, Math.min(1f - boundsX, wVal != null ? wVal.floatValue() : 1f));
+        boundsHeight = Math.max(0f, Math.min(1f - boundsY, hVal != null ? hVal.floatValue() : 1f));
+        resizeMode = "fit".equals(mode) ? "fit" : "fill";
+
+        android.app.Activity activity = getBridge().getActivity();
+        if (activity == null) {
+            call.reject("Activity not available");
+            return;
+        }
+
+        activity.runOnUiThread(() -> {
+            try {
+                applyVideoBounds();
+                call.resolve();
+            } catch (Exception e) {
+                call.reject("Error setting video bounds: " + e.getMessage(), e);
+            }
+        });
+    }
+
+    @PluginMethod
     public void setVideoSurfaceVisibility(PluginCall call) {
         Boolean visibleValue = call.getBoolean("visible", true);
         boolean visible = visibleValue != null ? visibleValue : true;
@@ -1264,5 +1296,71 @@ public class ExoPlayerSignagePlugin extends Plugin {
                 }
             }
         }, 2000); // First check after 2 seconds
+    }
+
+    private float clamp01(float value) {
+        return Math.max(0f, Math.min(1f, value));
+    }
+
+    /**
+     * Apply stored normalized bounds to the shared SurfaceView, anchored to the WebView
+     * viewport so HTML overlays (e.g. right-panel strip) stay pixel-aligned with the video.
+     * Must be called on the UI thread.
+     */
+    private void applyVideoBounds() {
+        if (videoSurfaceView == null) {
+            return;
+        }
+
+        android.webkit.WebView webView = getBridge().getWebView();
+        if (webView == null) {
+            android.util.Log.w("ExoPlayerSignage", "⚠️ applyVideoBounds: WebView not available");
+            return;
+        }
+
+        int baseW = webView.getWidth();
+        int baseH = webView.getHeight();
+        if (baseW <= 0 || baseH <= 0) {
+            // WebView not laid out yet; keep MATCH_PARENT until surfaceChanged / next call
+            android.util.Log.d("ExoPlayerSignage", "⏳ applyVideoBounds: WebView size not ready yet");
+            return;
+        }
+
+        int[] location = new int[2];
+        webView.getLocationInWindow(location);
+
+        int left = location[0] + Math.round(boundsX * baseW);
+        int top = location[1] + Math.round(boundsY * baseH);
+        int width = Math.max(1, Math.round(boundsWidth * baseW));
+        int height = Math.max(1, Math.round(boundsHeight * baseH));
+
+        if ("fit".equals(resizeMode) && videoContentWidth > 0 && videoContentHeight > 0) {
+            float videoAspect = (float) videoContentWidth / (float) videoContentHeight;
+            float viewAspect = (float) width / (float) height;
+            if (videoAspect > viewAspect) {
+                // Video wider than rect → letterbox top/bottom
+                int fittedH = Math.max(1, Math.round(width / videoAspect));
+                top += (height - fittedH) / 2;
+                height = fittedH;
+            } else {
+                // Video taller than rect → pillarbox left/right
+                int fittedW = Math.max(1, Math.round(height * videoAspect));
+                left += (width - fittedW) / 2;
+                width = fittedW;
+            }
+        }
+
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(width, height);
+        params.leftMargin = left;
+        params.topMargin = top;
+        videoSurfaceView.setLayoutParams(params);
+        videoSurfaceView.requestLayout();
+
+        android.util.Log.d("ExoPlayerSignage",
+            "✅ applyVideoBounds: mode=" + resizeMode
+                + " fractions=(" + boundsX + "," + boundsY + "," + boundsWidth + "," + boundsHeight + ")"
+                + " px=(" + left + "," + top + "," + width + "," + height + ")"
+                + " webView=" + baseW + "x" + baseH
+                + " offset=(" + location[0] + "," + location[1] + ")");
     }
 }

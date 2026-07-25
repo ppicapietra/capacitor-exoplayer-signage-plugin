@@ -35,6 +35,8 @@ npx cap sync
 * [`hide(...)`](#hide)
 * [`show(...)`](#show)
 * [`releasePlayer(...)`](#releaseplayer)
+* [`setVideoBounds(...)`](#setvideobounds)
+* [`setVideoSurfaceVisibility(...)`](#setvideosurfacevisibility)
 * [`addListener('audioPlaybackEnded', ...)`](#addlisteneraudioplaybackended-)
 * [`removeAllListeners()`](#removealllisteners)
 
@@ -147,6 +149,36 @@ releasePlayer(options: { playerId: string; }) => Promise<void>
 | Param         | Type                               |
 | ------------- | ---------------------------------- |
 | **`options`** | <code>{ playerId: string; }</code> |
+
+--------------------
+
+
+### setVideoBounds(...)
+
+```typescript
+setVideoBounds(options: { x: number; y: number; width: number; height: number; resizeMode?: 'fill' | 'fit'; }) => Promise<void>
+```
+
+Position/size the shared video SurfaceView within the WebView viewport.
+Coordinates are normalized fractions (0..1) of the WebView size.
+resizeMode: 'fill' stretches to the rect; 'fit' letterboxes within the rect.
+
+| Param         | Type                                                                                                |
+| ------------- | --------------------------------------------------------------------------------------------------- |
+| **`options`** | <code>{ x: number; y: number; width: number; height: number; resizeMode?: 'fill' \| 'fit'; }</code> |
+
+--------------------
+
+
+### setVideoSurfaceVisibility(...)
+
+```typescript
+setVideoSurfaceVisibility(options: { visible: boolean; }) => Promise<void>
+```
+
+| Param         | Type                               |
+| ------------- | ---------------------------------- |
+| **`options`** | <code>{ visible: boolean; }</code> |
 
 --------------------
 
