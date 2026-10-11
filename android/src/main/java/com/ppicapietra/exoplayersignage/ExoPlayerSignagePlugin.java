@@ -512,6 +512,13 @@ public class ExoPlayerSignagePlugin extends Plugin {
                                 applyVideoBounds();
                             }
                         }
+
+                        @Override
+                        public void onRenderedFirstFrame() {
+                            JSObject data = new JSObject();
+                            data.put("playerId", playerId);
+                            notifyListeners("videoFirstFrame", data);
+                        }
                     });
                 } else {
                     // Audio player - no SurfaceView needed

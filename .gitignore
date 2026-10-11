@@ -64,8 +64,23 @@ captures
 .idea
 
 # Keystore files
-# Uncomment the following line if you do not want to check your keystore files in.
-#*.jks
+*.jks
+*.keystore
+key.properties
 
 # External native build folder generated in Android Studio 2.2 and later
 .externalNativeBuild
+
+# Environment files: templates are tracked, real values never are
+.env
+.env.*
+!.env.example
+
+# Private keys, certificates and credentials
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+*cookies*.txt
+service-account*.json

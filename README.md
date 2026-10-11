@@ -38,6 +38,7 @@ npx cap sync
 * [`setVideoBounds(...)`](#setvideobounds)
 * [`setVideoSurfaceVisibility(...)`](#setvideosurfacevisibility)
 * [`addListener('audioPlaybackEnded', ...)`](#addlisteneraudioplaybackended-)
+* [`addListener('videoFirstFrame', ...)`](#addlistenervideofirstframe-)
 * [`removeAllListeners()`](#removealllisteners)
 
 </docgen-index>
@@ -192,6 +193,24 @@ addListener(eventName: 'audioPlaybackEnded', listenerFunc: (data: { playerId: st
 | Param              | Type                                                  |
 | ------------------ | ----------------------------------------------------- |
 | **`eventName`**    | <code>'audioPlaybackEnded'</code>                     |
+| **`listenerFunc`** | <code>(data: { playerId: string; }) =&gt; void</code> |
+
+**Returns:** <code>Promise&lt;any&gt;</code>
+
+--------------------
+
+
+### addListener('videoFirstFrame', ...)
+
+```typescript
+addListener(eventName: 'videoFirstFrame', listenerFunc: (data: { playerId: string; }) => void) => Promise<any>
+```
+
+Fired when a video player renders the first frame of the current media item.
+
+| Param              | Type                                                  |
+| ------------------ | ----------------------------------------------------- |
+| **`eventName`**    | <code>'videoFirstFrame'</code>                        |
 | **`listenerFunc`** | <code>(data: { playerId: string; }) =&gt; void</code> |
 
 **Returns:** <code>Promise&lt;any&gt;</code>

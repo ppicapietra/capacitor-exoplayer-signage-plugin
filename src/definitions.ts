@@ -21,5 +21,7 @@ export interface ExoPlayerSignagePlugin {
   }): Promise<void>;
   setVideoSurfaceVisibility(options: { visible: boolean }): Promise<void>;
   addListener(eventName: 'audioPlaybackEnded', listenerFunc: (data: { playerId: string }) => void): Promise<any>;
+  /** Fired when a video player renders the first frame of the current media item. */
+  addListener(eventName: 'videoFirstFrame', listenerFunc: (data: { playerId: string }) => void): Promise<any>;
   removeAllListeners(): Promise<void>;
 }
